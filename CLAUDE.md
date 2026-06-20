@@ -57,4 +57,24 @@ The initial experiment specifies:
 
 ## Project Status
 
-Research/planning phase. The `docs/` directory contains the reference papers and a Danish specification document. The experimental plan for "Rune 1" has been generated as `rune1_design.csv`.
+Three layers exist:
+
+- `conjoint/` — pure-Python (stdlib only) design generator + variance core. CLI: `python -m conjoint generate / scan`. Tests passing.
+- `backend/` — FastAPI + SQLAlchemy + Alembic. Models, migrations, OLS analyzer, all endpoints wired. Depends on numpy. Untested locally; expected to boot via `docker compose up`.
+- `web/` — React + Vite + TS + Tailwind + shadcn. Routes: surveys list/new/detail, participate (slider), results. Never `npm install`'d on the development box; expected to build on first run.
+
+The `rune1_design.csv`, `result-1/`, and `result-2/` deliverables in the
+project root are historical snapshots of past analyses. The K=16
+deliverable in `result-design-K16/` is **stale** — the algorithm now finds
+a strictly better design (3528 spanning trees vs 2160).
+
+## Read me first when picking up
+
+See **`HANDOFF.md`** at the repo root — that's the consolidated session-transfer document. It captures:
+
+- the mathematical derivations and design decisions behind the code
+- the "Rune 1" history including the OLD/NEW labelling bug
+- per-component status, known limitations, and open questions awaiting the user
+- how to verify the stack works on a fresh machine
+
+If `HANDOFF.md` and this file disagree, `HANDOFF.md` is the more recent authoritative source.
