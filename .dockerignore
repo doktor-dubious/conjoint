@@ -1,0 +1,14 @@
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.venv
+.git
+.idea
+.vscode
+docs
+data
+other
+scripts
+*.csv
+*.pdf
+*.xlsx

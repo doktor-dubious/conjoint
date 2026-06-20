@@ -1,0 +1,68 @@
+# Local-dev orchestration for the conjoint app.
+#
+# Services:
+#   api -- FastAPI service wrapping the conjoint Python package
+#   db  -- Postgres 16 (persistent volume)
+#   web -- Vite dev server for the React frontend (proxies /api -> api:8000)
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://conjoint:conjoint@db:5432/conjoint
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    develop:
+      watch:
+        - action: sync
+          path: ./conjoint
+          target: /srv/conjoint
+        - action: sync
+          path: ./backend/app
+          target: /srv/app
+        - action: rebuild
+          path: ./backend/requirements.txt
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: conjoint
+      POSTGRES_PASSWORD: conjoint
+      POSTGRES_DB: conjoint
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U conjoint"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+    # Vite dev server proxy targets api at http://localhost:8000 by default
+    # (see web/vite.config.ts); inside compose we override via env.
+    environment:
+      VITE_API_PROXY_TARGET: http://api:8000
+    develop:
+      watch:
+        - action: sync
+          path: ./web/src
+          target: /app/src
+        - action: rebuild
+          path: ./web/package.json
+
+volumes:
+  pgdata:
