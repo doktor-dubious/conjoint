@@ -89,8 +89,8 @@ def instantiate_survey(
         objects=[
             ObjectItem(
                 position=o.position,
-                # Concrete label if provided, else keep the plan's generic name.
-                name=(defs[o.position].text if defs.get(o.position) and defs[o.position].text else o.name),
+                # Given name if provided, else keep the plan's generic name.
+                name=(defs[o.position].name if defs.get(o.position) and defs[o.position].name else o.name),
                 text=defs[o.position].text if o.position in defs else None,
                 description=defs[o.position].description if o.position in defs else None,
                 image=defs[o.position].image if o.position in defs else None,

@@ -76,6 +76,7 @@ export interface SurveyOut {
 
 export interface ObjectDefIn {
   position: number;
+  name?: string | null;
   text?: string | null;
   description?: string | null;
   image?: string | null;

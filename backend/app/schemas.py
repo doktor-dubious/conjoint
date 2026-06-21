@@ -127,6 +127,7 @@ class SurveyOut(BaseModel):
 
 class ObjectDefIn(BaseModel):
     position: int
+    name: Optional[str] = None
     text: Optional[str] = None
     description: Optional[str] = None
     image: Optional[str] = None

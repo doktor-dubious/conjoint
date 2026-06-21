@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, Copy, Download, ListChecks, Trash2 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -22,8 +21,12 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  ObjLabel,
+  TestPlanObjectsPanel,
+  type ObjectValues,
+} from "@/components/TestPlanObjectsPanel";
+import {
   api,
-  type ObjectOut,
   type StoredDesignOut,
   type StoredTrialOut,
   type SurveyOut,
@@ -91,58 +94,6 @@ const SURVEY_COLUMNS: DataTableColumn<SurveyOut>[] = [
   },
 ];
 
-const OBJECT_COLUMNS: DataTableColumn<ObjectOut>[] = [
-  {
-    key: "pos",
-    header: "#",
-    sortable: true,
-    sortValue: (o) => o.position,
-    render: (o) => o.position + 1,
-    className: "tabular-nums text-muted-foreground",
-    headClassName: "w-12",
-  },
-  {
-    key: "name",
-    header: "Name",
-    sortable: true,
-    sortValue: (o) => o.name.toLowerCase(),
-    render: (o) => <span className="font-medium">{o.name}</span>,
-  },
-  {
-    key: "description",
-    header: "Description",
-    render: (o) => (
-      <span className="text-muted-foreground">{o.description || "—"}</span>
-    ),
-  },
-  {
-    key: "image",
-    header: "Image",
-    render: (o) =>
-      o.image ? (
-        <img
-          src={o.image}
-          alt={o.name}
-          className="h-7 w-7 rounded object-cover"
-        />
-      ) : (
-        <span className="text-muted-foreground">—</span>
-      ),
-    headClassName: "w-20",
-  },
-  {
-    key: "status",
-    header: "Status",
-    render: (o) =>
-      o.text || o.image ? (
-        <Badge>Defined</Badge>
-      ) : (
-        <Badge variant="secondary">Undefined</Badge>
-      ),
-    headClassName: "w-28",
-  },
-];
-
 const COMPARISON_COLUMNS: DataTableColumn<StoredTrialOut>[] = [
   {
     key: "n",
@@ -161,14 +112,22 @@ const COMPARISON_COLUMNS: DataTableColumn<StoredTrialOut>[] = [
     header: "Left",
     sortable: true,
     sortValue: (t) => t.left_name.toLowerCase(),
-    render: (t) => <span className="font-medium">{t.left_name}</span>,
+    render: (t) => (
+      <span className="font-medium">
+        <ObjLabel name={t.left_name} />
+      </span>
+    ),
   },
   {
     key: "right",
     header: "Right",
     sortable: true,
     sortValue: (t) => t.right_name.toLowerCase(),
-    render: (t) => <span className="font-medium">{t.right_name}</span>,
+    render: (t) => (
+      <span className="font-medium">
+        <ObjLabel name={t.right_name} />
+      </span>
+    ),
   },
 ];
 
@@ -179,7 +138,22 @@ export function SurveyListPage() {
 
   const [selected, setSelected] = useState<SurveyOut | null>(null);
   const [design, setDesign] = useState<StoredDesignOut | null>(null);
+  const [sourcePlanName, setSourcePlanName] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("details");
+
+  // Read-only object definitions for the shared panel (from stored objects).
+  const objectValues = useMemo<Record<string, ObjectValues>>(() => {
+    const m: Record<string, ObjectValues> = {};
+    selected?.objects.forEach((o) => {
+      m[o.id] = {
+        name: o.name,
+        text: o.text,
+        description: o.description,
+        image: o.image,
+      };
+    });
+    return m;
+  }, [selected]);
 
   // Dialogs
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -222,11 +196,20 @@ export function SurveyListPage() {
     setSelected(survey);
     setDetailTab("details");
     setDesign(null);
+    setSourcePlanName(null);
     try {
       const designs = await api.listDesigns(survey.id);
       setDesign(designs[0] ?? null);
     } catch {
       setDesign(null);
+    }
+    if (survey.source_test_plan_id) {
+      try {
+        const plan = await api.getSurvey(survey.source_test_plan_id);
+        setSourcePlanName(plan.name);
+      } catch {
+        setSourcePlanName(null);
+      }
     }
   }
 
@@ -340,10 +323,10 @@ export function SurveyListPage() {
                   Details
                 </TabsTrigger>
                 <TabsTrigger value="core" className={TAB_CLASS}>
-                  Core
+                  Test Plan
                 </TabsTrigger>
                 <TabsTrigger value="objects" className={TAB_CLASS}>
-                  Objects
+                  Test Plan Objects
                 </TabsTrigger>
                 <TabsTrigger value="comparisons" className={TAB_CLASS}>
                   Comparisons
@@ -393,8 +376,15 @@ export function SurveyListPage() {
               </div>
             </TabsContent>
 
-            {/* Core (read-only) */}
+            {/* Test Plan (read-only) */}
             <TabsContent value="core" className="mt-6 max-w-2xl">
+              <StatRow
+                label="Test plan"
+                value={
+                  sourcePlanName ??
+                  (selected.source_test_plan_id ? "…" : "—")
+                }
+              />
               <StatRow label="Number of objects" value={selected.K} />
               <StatRow label="Number of comparisons" value={selected.N} />
               <StatRow label="Maximum Scale" value={selected.scale_max} />
@@ -404,7 +394,7 @@ export function SurveyListPage() {
                 value={selected.randomize_order ? "Yes" : "No"}
               />
               <StatRow
-                label="Source test plan"
+                label="Source test plan ID"
                 value={
                   selected.source_test_plan_id ? (
                     <CopyId id={selected.source_test_plan_id} />
@@ -420,15 +410,11 @@ export function SurveyListPage() {
               <StatRow label="Seed" value={design ? design.seed : "—"} />
             </TabsContent>
 
-            {/* Objects (concrete definitions) */}
+            {/* Test Plan Objects (concrete definitions, read-only) */}
             <TabsContent value="objects" className="mt-6">
-              <DataTable
-                rows={selected.objects}
-                columns={OBJECT_COLUMNS}
-                getRowId={(o) => o.id}
-                getSearchText={(o) => `${o.name} ${o.description ?? ""}`}
-                emptyText="No objects."
-                initialSortKey="pos"
+              <TestPlanObjectsPanel
+                objects={selected.objects}
+                valuesById={objectValues}
               />
             </TabsContent>
 
