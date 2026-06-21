@@ -554,43 +554,45 @@ export function TestPlanNewPage() {
           </div>
         )}
 
-        {/* ── Action bar (applies to the whole plan, visible on every tab) ── */}
-        <div className="mt-6 flex justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => navigate("/test-plans")}
-            disabled={generating || finalizing}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={generatePreview}
-            disabled={generateDisabled}
-            title={
-              validPreview && !seedChanged
-                ? "Change the seed to reseed the test plan"
-                : undefined
-            }
-          >
-            {generateLabel}
-          </Button>
-          {hasPreview && (
+        {/* ── Action bar (Core tab only) ── */}
+        {activeTab === "core" && (
+          <div className="mt-6 flex justify-end gap-2">
             <Button
               type="button"
-              onClick={finalize}
-              disabled={!validPreview || finalizing || generating}
+              variant="outline"
+              onClick={() => navigate("/test-plans")}
+              disabled={generating || finalizing}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={generatePreview}
+              disabled={generateDisabled}
               title={
-                structuralStale
-                  ? "Regenerate the preview before finalizing"
+                validPreview && !seedChanged
+                  ? "Change the seed to reseed the test plan"
                   : undefined
               }
             >
-              {finalizing ? "Finalizing…" : "Finalize Test Plan"}
+              {generateLabel}
             </Button>
-          )}
-        </div>
+            {hasPreview && (
+              <Button
+                type="button"
+                onClick={finalize}
+                disabled={!validPreview || finalizing || generating}
+                title={
+                  structuralStale
+                    ? "Regenerate the preview before finalizing"
+                    : undefined
+                }
+              >
+                {finalizing ? "Finalizing…" : "Finalize Test Plan"}
+              </Button>
+            )}
+          </div>
+        )}
       </div>
     </TooltipProvider>
   );

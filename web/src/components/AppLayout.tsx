@@ -47,7 +47,6 @@ function pageTitle(pathname: string): string {
   if (pathname.startsWith("/test-plans/new")) return "New Test Plan";
   if (pathname.startsWith("/test-plans")) return "Test Plans";
   if (pathname.startsWith("/configuration")) return "Configuration";
-  if (pathname.startsWith("/scan")) return "Variance Scan";
   return "Copenhagen Conjoint";
 }
 
@@ -125,8 +124,8 @@ function UserMenu() {
                 New
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate("/surveys")}>
-                <LayoutGrid />
-                Completed
+                <ClipboardList />
+                List
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuPortal>
