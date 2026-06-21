@@ -128,7 +128,7 @@ export function TestPlansPage() {
 
   useEffect(() => {
     api
-      .listSurveys()
+      .listSurveys({ testPlan: true })
       .then(setPlans)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));

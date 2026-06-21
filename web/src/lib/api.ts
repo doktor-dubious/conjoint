@@ -55,6 +55,9 @@ export interface ObjectOut {
   id: string;
   position: number;
   name: string;
+  text: string | null;
+  description: string | null;
+  image: string | null;
 }
 
 export interface SurveyOut {
@@ -66,8 +69,22 @@ export interface SurveyOut {
   scale_min: number;
   scale_max: number;
   randomize_order: boolean;
+  source_test_plan_id: string | null;
   created_at: string;
   objects: ObjectOut[];
+}
+
+export interface ObjectDefIn {
+  position: number;
+  text?: string | null;
+  description?: string | null;
+  image?: string | null;
+}
+
+export interface SurveyInstanceCreate {
+  name: string;
+  description?: string;
+  objects: ObjectDefIn[];
 }
 
 export interface SurveyCreate {
@@ -204,8 +221,16 @@ export const api = {
   },
 
   // surveys
-  listSurveys() {
-    return get<SurveyOut[]>("/api/surveys");
+  listSurveys(opts?: { testPlan?: boolean }) {
+    const q =
+      opts?.testPlan === undefined ? "" : `?test_plan=${opts.testPlan}`;
+    return get<SurveyOut[]>(`/api/surveys${q}`);
+  },
+  instantiateSurvey(testPlanId: string, req: SurveyInstanceCreate) {
+    return post<SurveyInstanceCreate, SurveyOut>(
+      `/api/surveys/${testPlanId}/instantiate`,
+      req,
+    );
   },
   getSurvey(id: string) {
     return get<SurveyOut>(`/api/surveys/${id}`);

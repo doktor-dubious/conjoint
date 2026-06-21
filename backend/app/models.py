@@ -44,6 +44,15 @@ class Survey(Base):
     randomize_order: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false", default=False
     )
+    # NULL  -> this row is a reusable *test plan* (generic objects O1..OK).
+    # Set   -> this row is an actual *survey* instantiated from that test plan
+    #          (concrete object text/description/image, own copied design).
+    source_test_plan_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("surveys.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     objects: Mapped[List[ObjectItem]] = relationship(
         back_populates="survey",
@@ -74,6 +83,10 @@ class ObjectItem(Base):
     )
     position: Mapped[int] = mapped_column(Integer)  # 0..K-1
     name: Mapped[str] = mapped_column(String(255))
+    # Concrete object definition (survey instances only; NULL on test plans).
+    text: Mapped[Optional[str]] = mapped_column(Text)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    image: Mapped[Optional[str]] = mapped_column(Text)  # data URL or external URL
 
     survey: Mapped[Survey] = relationship(back_populates="objects")
 

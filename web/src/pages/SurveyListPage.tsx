@@ -18,7 +18,7 @@ export function SurveyListPage() {
 
   useEffect(() => {
     api
-      .listSurveys()
+      .listSurveys({ testPlan: false })
       .then(setSurveys)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));

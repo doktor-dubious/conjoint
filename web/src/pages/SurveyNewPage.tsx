@@ -95,6 +95,7 @@ export function SurveyNewPage() {
   const [objTab, setObjTab] = useState<"text" | "image">("text");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isFirstRenderRef = useRef(true);
+  const [creating, setCreating] = useState(false);
 
   // Restore form state from localStorage on mount.
   useEffect(() => {
@@ -121,7 +122,7 @@ export function SurveyNewPage() {
 
   useEffect(() => {
     api
-      .listSurveys()
+      .listSurveys({ testPlan: true })
       .then((surveys) => {
         setPlans(surveys);
         // Restore selected plan if it exists in the current list.
@@ -142,11 +143,16 @@ export function SurveyNewPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Switching test plan clears the object definitions + open detail.
-  useEffect(() => {
-    setSelectedObject(null);
-    setObjectDefs({});
-  }, [selected?.id]);
+  // Selecting a *different* test plan clears the object definitions + open
+  // detail (the objects belong to a different plan). Re-selecting the same
+  // plan, or restoring from localStorage, keeps them.
+  function selectPlan(plan: SurveyOut) {
+    if (plan.id !== selected?.id) {
+      setSelectedObject(null);
+      setObjectDefs({});
+    }
+    setSelected(plan);
+  }
 
   function updateDef(id: string, patch: Partial<ObjectDef>) {
     setObjectDefs((prev) => ({
@@ -163,6 +169,31 @@ export function SurveyNewPage() {
       updateDef(selectedObject.id, { image: String(reader.result) });
     reader.readAsDataURL(file);
     e.target.value = ""; // allow re-selecting the same file
+  }
+
+  async function createSurvey() {
+    if (!selected || !name.trim()) return;
+    setCreating(true);
+    setError(null);
+    try {
+      const objects = selected.objects.map((o) => ({
+        position: o.position,
+        text: objectDefs[o.id]?.text?.trim() || null,
+        description: objectDefs[o.id]?.description?.trim() || null,
+        image: objectDefs[o.id]?.image || null,
+      }));
+      const survey = await api.instantiateSurvey(selected.id, {
+        name: name.trim(),
+        description: description || undefined,
+        objects,
+      });
+      localStorage.removeItem(STORAGE_KEY);
+      navigate(`/surveys/${survey.id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCreating(false);
+    }
   }
 
   // Animated underline that slides under the active tab.
@@ -295,14 +326,10 @@ export function SurveyNewPage() {
               </Button>
               <Button
                 type="button"
-                disabled={!name.trim() || !selected}
-                onClick={() =>
-                  setError(
-                    "Creating a survey from a test plan is not wired to the backend yet (survey ↔ test-plan separation is pending).",
-                  )
-                }
+                disabled={!name.trim() || !selected || creating}
+                onClick={createSurvey}
               >
-                Create Survey
+                {creating ? "Creating…" : "Create Survey"}
               </Button>
             </div>
           </div>
@@ -321,7 +348,7 @@ export function SurveyNewPage() {
             getRowId={(p) => p.id}
             getSearchText={(p) => p.name}
             activeId={selected?.id ?? null}
-            onRowClick={setSelected}
+            onRowClick={selectPlan}
             loading={loading}
             emptyText="No test plans found."
             initialSortKey="created"

@@ -16,7 +16,7 @@ from ..models import (
 from ..schemas import (
     GenerateDesignRequest, ManualDesignRequest, RespondentCreate, RespondentOut,
     ResponseBatchSubmit, ResponseOut, StoredDesignOut, StoredTrialOut,
-    SurveyCreate, SurveyOut, SurveyUpdate,
+    SurveyCreate, SurveyInstanceCreate, SurveyOut, SurveyUpdate,
 )
 
 
@@ -48,13 +48,102 @@ def create_survey(payload: SurveyCreate, db: Session = Depends(get_db)) -> Surve
     return survey
 
 
+@router.post(
+    "/{test_plan_id}/instantiate",
+    response_model=SurveyOut,
+    status_code=201,
+)
+def instantiate_survey(
+    test_plan_id: str,
+    payload: SurveyInstanceCreate,
+    db: Session = Depends(get_db),
+) -> Survey:
+    """Create an actual survey from a finalized test plan.
+
+    Copies the plan's design and attaches concrete object definitions
+    (text / description / image), matched to plan objects by position.
+    """
+    plan = db.get(Survey, test_plan_id)
+    if not plan:
+        raise HTTPException(404, "test plan not found")
+    plan_objects = sorted(plan.objects, key=lambda o: o.position)
+
+    design = db.execute(
+        select(Design)
+        .where(Design.survey_id == plan.id)
+        .options(selectinload(Design.trials))
+        .order_by(Design.created_at.desc())
+    ).scalars().first()
+    if not design:
+        raise HTTPException(400, "test plan has no finalized design")
+
+    defs = {d.position: d for d in payload.objects}
+
+    survey = Survey(
+        name=payload.name,
+        description=payload.description,
+        K=plan.K, N=plan.N,
+        scale_min=plan.scale_min, scale_max=plan.scale_max,
+        randomize_order=plan.randomize_order,
+        source_test_plan_id=plan.id,
+        objects=[
+            ObjectItem(
+                position=o.position,
+                # Concrete label if provided, else keep the plan's generic name.
+                name=(defs[o.position].text if defs.get(o.position) and defs[o.position].text else o.name),
+                text=defs[o.position].text if o.position in defs else None,
+                description=defs[o.position].description if o.position in defs else None,
+                image=defs[o.position].image if o.position in defs else None,
+            )
+            for o in plan_objects
+        ],
+    )
+    db.add(survey)
+    db.flush()  # assign UUIDs to the new objects
+
+    new_obj_by_pos = {o.position: o.id for o in survey.objects}
+    plan_pos_by_id = {o.id: o.position for o in plan_objects}
+
+    new_design = Design(
+        survey_id=survey.id,
+        objective=design.objective, seed=design.seed, max_iter=design.max_iter,
+        min_var=design.min_var, max_var=design.max_var, mean_var=design.mean_var,
+        ratio=design.ratio, spanning_trees=design.spanning_trees,
+        trials=[
+            Trial(
+                trial_number=t.trial_number,
+                left_id=new_obj_by_pos[plan_pos_by_id[t.left_id]],
+                right_id=new_obj_by_pos[plan_pos_by_id[t.right_id]],
+            )
+            for t in sorted(design.trials, key=lambda x: x.trial_number)
+        ],
+    )
+    db.add(new_design)
+    db.commit()
+    db.refresh(survey)
+    return survey
+
+
 @router.get("", response_model=list[SurveyOut])
-def list_surveys(db: Session = Depends(get_db)) -> list[Survey]:
+def list_surveys(
+    test_plan: bool | None = None,
+    db: Session = Depends(get_db),
+) -> list[Survey]:
+    """List surveys.
+
+    test_plan=True  -> only reusable test plans (no source_test_plan_id)
+    test_plan=False -> only actual surveys (instantiated from a test plan)
+    omitted         -> everything
+    """
     stmt = (
         select(Survey)
         .options(selectinload(Survey.objects))
         .order_by(Survey.created_at.desc())
     )
+    if test_plan is True:
+        stmt = stmt.where(Survey.source_test_plan_id.is_(None))
+    elif test_plan is False:
+        stmt = stmt.where(Survey.source_test_plan_id.is_not(None))
     return list(db.execute(stmt).scalars().all())
 
 

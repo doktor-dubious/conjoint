@@ -105,6 +105,9 @@ class ObjectOut(BaseModel):
     id: str
     position: int
     name: str
+    text: Optional[str] = None
+    description: Optional[str] = None
+    image: Optional[str] = None
 
 
 class SurveyOut(BaseModel):
@@ -117,8 +120,27 @@ class SurveyOut(BaseModel):
     scale_min: float
     scale_max: float
     randomize_order: bool
+    source_test_plan_id: Optional[str] = None
     created_at: datetime
     objects: List[ObjectOut]
+
+
+class ObjectDefIn(BaseModel):
+    position: int
+    text: Optional[str] = None
+    description: Optional[str] = None
+    image: Optional[str] = None
+
+
+class SurveyInstanceCreate(BaseModel):
+    """Create an actual survey by instantiating a finalized test plan.
+
+    Copies the test plan's design and attaches concrete object definitions
+    (text / description / image), matched to the plan's objects by position.
+    """
+    name: str
+    description: Optional[str] = None
+    objects: List[ObjectDefIn] = Field(default_factory=list)
 
 
 class GenerateDesignRequest(BaseModel):
