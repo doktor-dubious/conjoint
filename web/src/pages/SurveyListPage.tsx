@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, Copy, ListChecks, Trash2, Upload } from "lucide-react";
+import {
+  BarChart3,
+  Check,
+  Copy,
+  ListChecks,
+  Trash2,
+  Upload,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -28,7 +35,17 @@ import {
   type ObjectValues,
 } from "@/components/TestPlanObjectsPanel";
 import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   api,
+  type AnalyzeResponse,
+  type RespondentAnalysis,
   type StoredDesignOut,
   type StoredTrialOut,
   type SurveyDataRow,
@@ -43,6 +60,7 @@ type DetailTab =
   | "objects"
   | "comparisons"
   | "data"
+  | "results"
   | "actions";
 
 const SURVEY_DATA_COLUMNS: DataTableColumn<SurveyDataRow>[] = [
@@ -197,6 +215,77 @@ export function SurveyListPage() {
   const [design, setDesign] = useState<StoredDesignOut | null>(null);
   const [surveyData, setSurveyData] = useState<SurveyDataRow[]>([]);
   const [sourcePlanName, setSourcePlanName] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<AnalyzeResponse | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+
+  async function runAnalysis() {
+    if (!selected) return;
+    setAnalyzing(true);
+    setAnalysisError(null);
+    try {
+      setAnalysis(await api.analyze(selected.id));
+    } catch (e) {
+      setAnalysisError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  // Per-respondent estimate columns: Id, #, τ, then one α column per object.
+  const perRespondentColumns = useMemo<DataTableColumn<RespondentAnalysis>[]>(
+    () => {
+      const objs =
+        analysis?.aggregate ?? analysis?.per_respondent[0]?.alphas ?? [];
+      const alphaOf = (r: RespondentAnalysis, oid: string) =>
+        r.alphas.find((a) => a.object_id === oid)?.alpha ?? 0;
+      return [
+        {
+          key: "id",
+          header: "Id",
+          sortable: true,
+          sortValue: (r) => r.external_id ?? "",
+          render: (r) => (
+            <span className="font-mono text-xs">{r.external_id ?? "—"}</span>
+          ),
+        },
+        {
+          key: "n",
+          header: "# resp.",
+          sortable: true,
+          sortValue: (r) => r.n_responses,
+          render: (r) => (
+            <span className="tabular-nums text-muted-foreground">
+              {r.n_responses}
+            </span>
+          ),
+          headClassName: "w-20",
+        },
+        {
+          key: "tau",
+          header: "τ",
+          sortable: true,
+          sortValue: (r) => r.tau,
+          render: (r) => (
+            <span className="tabular-nums">{r.tau.toFixed(2)}</span>
+          ),
+          headClassName: "w-20",
+        },
+        ...objs.map((o) => ({
+          key: `a_${o.object_id}`,
+          header: o.name,
+          sortable: true,
+          sortValue: (r: RespondentAnalysis) => alphaOf(r, o.object_id),
+          render: (r: RespondentAnalysis) => (
+            <span className="tabular-nums">
+              {alphaOf(r, o.object_id).toFixed(2)}
+            </span>
+          ),
+        })),
+      ];
+    },
+    [analysis],
+  );
   const [detailTab, setDetailTab] = useState<DetailTab>("details");
   const [maximized, setMaximized] = useState(
     () => localStorage.getItem("surveys_detail_max") === "1",
@@ -286,6 +375,8 @@ export function SurveyListPage() {
     setDesign(null);
     setSurveyData([]);
     setSourcePlanName(null);
+    setAnalysis(null);
+    setAnalysisError(null);
     try {
       const designs = await api.listDesigns(survey.id);
       setDesign(designs[0] ?? null);
@@ -403,6 +494,9 @@ export function SurveyListPage() {
                 </TabsTrigger>
                 <TabsTrigger value="data" className={TAB_CLASS}>
                   Survey Data
+                </TabsTrigger>
+                <TabsTrigger value="results" className={TAB_CLASS}>
+                  Survey Results
                 </TabsTrigger>
                 <TabsTrigger value="actions" className={TAB_CLASS}>
                   Actions
@@ -528,6 +622,119 @@ export function SurveyListPage() {
                 emptyText="No response data yet. Import data from the Actions tab."
                 initialSortKey="id"
               />
+            </TabsContent>
+
+            {/* Survey Results (analysis) */}
+            <TabsContent value="results" className="mt-6">
+              <div className="mb-4 flex items-center gap-3">
+                <Button onClick={runAnalysis} disabled={analyzing}>
+                  <BarChart3 className="h-4 w-4" />
+                  {analyzing
+                    ? "Analyzing…"
+                    : analysis
+                      ? "Re-run analysis"
+                      : "Start analysis"}
+                </Button>
+                {analysis && (
+                  <span className="text-xs text-muted-foreground">
+                    {analysis.n_respondents} respondent(s) analysed
+                  </span>
+                )}
+              </div>
+
+              {analysisError && (
+                <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+                  {analysisError}
+                </div>
+              )}
+
+              {!analysis && !analysisError && (
+                <p className="text-sm text-muted-foreground">
+                  Run the OLS part-worth analysis (Gaussian GLM with an order
+                  effect τ) over this survey's responses.
+                </p>
+              )}
+
+              {analysis && (
+                <div className="space-y-8">
+                  {/* Population part-worths */}
+                  <div>
+                    <h3 className="mb-1 text-sm font-semibold">
+                      Population part-worths
+                    </h3>
+                    <p className="mb-3 text-xs text-muted-foreground">
+                      Mean utility per object across {analysis.n_respondents}{" "}
+                      respondent(s).
+                      {analysis.per_respondent.some(
+                        (r) => r.residual_df === 0,
+                      ) &&
+                        " Per-respondent models are saturated (residual df = 0), so standard errors are not estimable."}
+                    </p>
+                    {(() => {
+                      const agg = [...(analysis.aggregate ?? [])].sort(
+                        (a, b) => b.alpha - a.alpha,
+                      );
+                      return (
+                        <>
+                          <div className="max-w-md overflow-hidden rounded-md border">
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                  <TableHead className="pl-4">Object</TableHead>
+                                  <TableHead className="text-right">
+                                    Part-worth (α)
+                                  </TableHead>
+                                  <TableHead className="w-20 text-right">
+                                    SE
+                                  </TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {agg.map((a) => (
+                                  <TableRow key={a.object_id}>
+                                    <TableCell className="pl-4 font-medium">
+                                      {a.name}
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums">
+                                      {a.alpha.toFixed(2)}
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                                      {a.se == null ? "—" : a.se.toFixed(2)}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                          {agg.length > 0 && (
+                            <p className="mt-2 text-sm">
+                              Ranking:{" "}
+                              <span className="font-medium">
+                                {agg.map((a) => a.name).join(" > ")}
+                              </span>
+                            </p>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Per-respondent estimates */}
+                  <div>
+                    <h3 className="mb-3 text-sm font-semibold">
+                      Per-respondent estimates
+                    </h3>
+                    <DataTable
+                      rows={analysis.per_respondent}
+                      columns={perRespondentColumns}
+                      getRowId={(r) => r.respondent_id}
+                      getSearchText={(r) => r.external_id ?? ""}
+                      emptyText="No respondents."
+                      initialSortKey="id"
+                    />
+                  </div>
+                </div>
+              )}
             </TabsContent>
 
             {/* Actions */}
