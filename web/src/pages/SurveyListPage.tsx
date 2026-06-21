@@ -36,6 +36,8 @@ import {
   TestPlanObjectsPanel,
   type ObjectValues,
 } from "@/components/TestPlanObjectsPanel";
+import { SurveyResultCharts } from "@/components/SurveyResultCharts";
+import { computeTallies, fmtCount } from "@/lib/results";
 import {
   Table,
   TableBody,
@@ -207,133 +209,6 @@ const COMPARISON_COLUMNS: DataTableColumn<StoredTrialOut>[] = [
     ),
   },
 ];
-
-// ── Winner / ranking tallies (computed from the per-respondent part-worths) ──
-// Part-worths can tie (coarse data, saturated N=K model), so two conventions:
-//   strict     — count a respondent only if its order is unambiguous; ties go
-//                to a "Tie"/"Has ties" bucket
-//   fractional — split a tied respondent equally across the tied outcomes
-const TIE_EPS = 1e-4;
-
-const fmtCount = (v: number) =>
-  Math.abs(v - Math.round(v)) < 1e-9 ? String(Math.round(v)) : v.toFixed(2);
-
-function indexPermutations(n: number): number[][] {
-  const out: number[][] = [];
-  const go = (cur: number[], rest: number[]) => {
-    if (!rest.length) {
-      out.push(cur);
-      return;
-    }
-    rest.forEach((v, i) =>
-      go([...cur, v], [...rest.slice(0, i), ...rest.slice(i + 1)]),
-    );
-  };
-  go([], Array.from({ length: n }, (_, i) => i));
-  return out;
-}
-
-function shortCodes(names: string[]): string[] {
-  const first = names.map((n) => (n.trim()[0] || "?").toUpperCase());
-  return new Set(first).size === names.length
-    ? first
-    : names.map((_, i) => String(i + 1));
-}
-
-type Tallies = {
-  codes: { name: string; code: string }[];
-  winners: { name: string; strict: number; fractional: number }[];
-  winnerTie: number;
-  rankings: { key: string; strict: number; fractional: number }[];
-  rankingTie: number;
-  rankingTooBig: boolean;
-};
-
-function computeTallies(analysis: AnalyzeResponse): Tallies {
-  const objs = (
-    analysis.aggregate ??
-    analysis.per_respondent[0]?.alphas ??
-    []
-  ).map((o) => ({ object_id: o.object_id, name: o.name }));
-  const K = objs.length;
-  const codes = shortCodes(objs.map((o) => o.name));
-  const rankingTooBig = K > 4 || K < 1;
-  const perms = rankingTooBig ? [] : indexPermutations(K);
-
-  const strictWins: Record<string, number> = {};
-  const fracWins: Record<string, number> = {};
-  objs.forEach((o) => {
-    strictWins[o.name] = 0;
-    fracWins[o.name] = 0;
-  });
-  let winnerTie = 0;
-  const strictRank: Record<string, number> = {};
-  const fracRank: Record<string, number> = {};
-  let rankingTie = 0;
-
-  for (const r of analysis.per_respondent) {
-    const a = objs.map(
-      (o) => r.alphas.find((x) => x.object_id === o.object_id)?.alpha ?? 0,
-    );
-    const maxv = Math.max(...a);
-    const top = a
-      .map((v, i) => ({ v, i }))
-      .filter((x) => Math.abs(x.v - maxv) < TIE_EPS)
-      .map((x) => x.i);
-    if (top.length === 1) strictWins[objs[top[0]].name] += 1;
-    else winnerTie += 1;
-    top.forEach((i) => (fracWins[objs[i].name] += 1 / top.length));
-
-    if (!rankingTooBig) {
-      const distinct = new Set(a.map((v) => v.toFixed(4))).size === K;
-      if (distinct) {
-        const key = objs
-          .map((_, i) => i)
-          .sort((x, y) => a[y] - a[x])
-          .map((i) => codes[i])
-          .join("");
-        strictRank[key] = (strictRank[key] || 0) + 1;
-      } else {
-        rankingTie += 1;
-      }
-      const consistent = perms.filter((p) => {
-        for (let k = 0; k + 1 < p.length; k++)
-          if (a[p[k]] < a[p[k + 1]] - TIE_EPS) return false;
-        return true;
-      });
-      consistent.forEach((p) => {
-        const key = p.map((i) => codes[i]).join("");
-        fracRank[key] = (fracRank[key] || 0) + 1 / consistent.length;
-      });
-    }
-  }
-
-  const winners = objs
-    .map((o) => ({
-      name: o.name,
-      strict: strictWins[o.name],
-      fractional: fracWins[o.name],
-    }))
-    .sort((x, y) => y.fractional - x.fractional);
-
-  const keys = new Set([...Object.keys(strictRank), ...Object.keys(fracRank)]);
-  const rankings = [...keys]
-    .map((key) => ({
-      key,
-      strict: strictRank[key] || 0,
-      fractional: fracRank[key] || 0,
-    }))
-    .sort((x, y) => y.fractional - x.fractional || y.strict - x.strict);
-
-  return {
-    codes: objs.map((o, i) => ({ name: o.name, code: codes[i] })),
-    winners,
-    winnerTie,
-    rankings,
-    rankingTie,
-    rankingTooBig,
-  };
-}
 
 export function SurveyListPage() {
   const [surveys, setSurveys] = useState<SurveyOut[]>([]);
@@ -997,6 +872,19 @@ export function SurveyListPage() {
                       initialSortKey="id"
                     />
                   </div>
+
+                  {/* Charts */}
+                  {tallies && (
+                    <div>
+                      <h3 className="mb-3 text-sm font-semibold">Charts</h3>
+                      <SurveyResultCharts
+                        analysis={analysis}
+                        surveyData={surveyData}
+                        tallies={tallies}
+                        scaleMax={selected.scale_max}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </TabsContent>
