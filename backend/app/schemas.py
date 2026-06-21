@@ -102,14 +102,14 @@ class SurveyUpdate(BaseModel):
 
 class ObjectOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int
+    id: str
     position: int
     name: str
 
 
 class SurveyOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int
+    id: str
     name: str
     description: Optional[str]
     K: int
@@ -144,18 +144,18 @@ class ManualDesignRequest(BaseModel):
 
 class StoredTrialOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int
+    id: str
     trial_number: int
-    left_id: int
-    right_id: int
+    left_id: str
+    right_id: str
     left_name: str
     right_name: str
 
 
 class StoredDesignOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int
-    survey_id: int
+    id: str
+    survey_id: str
     objective: str
     seed: int
     max_iter: int
@@ -174,15 +174,15 @@ class RespondentCreate(BaseModel):
 
 class RespondentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int
-    survey_id: int
+    id: str
+    survey_id: str
     external_id: Optional[str]
     started_at: datetime
     completed_at: Optional[datetime]
 
 
 class ResponseSubmit(BaseModel):
-    trial_id: int
+    trial_id: str
     raw_value: float
 
 
@@ -192,9 +192,9 @@ class ResponseBatchSubmit(BaseModel):
 
 class ResponseOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id: int
-    respondent_id: int
-    trial_id: int
+    id: str
+    respondent_id: str
+    trial_id: str
     raw_value: float
     y: float
     recorded_at: datetime
@@ -206,7 +206,7 @@ class ResponseOut(BaseModel):
 
 
 class AlphaEstimate(BaseModel):
-    object_id: int
+    object_id: str
     position: int
     name: str
     alpha: float
@@ -214,7 +214,7 @@ class AlphaEstimate(BaseModel):
 
 
 class RespondentAnalysis(BaseModel):
-    respondent_id: int
+    respondent_id: str
     external_id: Optional[str]
     n_responses: int
     residual_df: int
@@ -225,8 +225,8 @@ class RespondentAnalysis(BaseModel):
 
 
 class AnalyzeResponse(BaseModel):
-    survey_id: int
-    design_id: int
+    survey_id: str
+    design_id: str
     n_respondents: int
     per_respondent: List[RespondentAnalysis]
     aggregate: Optional[List[AlphaEstimate]] = None

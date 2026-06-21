@@ -52,13 +52,13 @@ export interface DesignResponse {
 // ---------- persistent: surveys / designs ----------
 
 export interface ObjectOut {
-  id: number;
+  id: string;
   position: number;
   name: string;
 }
 
 export interface SurveyOut {
-  id: number;
+  id: string;
   name: string;
   description: string | null;
   K: number;
@@ -82,17 +82,17 @@ export interface SurveyCreate {
 }
 
 export interface StoredTrialOut {
-  id: number;
+  id: string;
   trial_number: number;
-  left_id: number;
-  right_id: number;
+  left_id: string;
+  right_id: string;
   left_name: string;
   right_name: string;
 }
 
 export interface StoredDesignOut {
-  id: number;
-  survey_id: number;
+  id: string;
+  survey_id: string;
   objective: Objective;
   seed: number;
   max_iter: number;
@@ -106,22 +106,22 @@ export interface StoredDesignOut {
 }
 
 export interface RespondentOut {
-  id: number;
-  survey_id: number;
+  id: string;
+  survey_id: string;
   external_id: string | null;
   started_at: string;
   completed_at: string | null;
 }
 
 export interface ResponseSubmit {
-  trial_id: number;
+  trial_id: string;
   raw_value: number;
 }
 
 export interface ResponseOut {
-  id: number;
-  respondent_id: number;
-  trial_id: number;
+  id: string;
+  respondent_id: string;
+  trial_id: string;
   raw_value: number;
   y: number;
   recorded_at: string;
@@ -130,7 +130,7 @@ export interface ResponseOut {
 // ---------- analysis ----------
 
 export interface AlphaEstimate {
-  object_id: number;
+  object_id: string;
   position: number;
   name: string;
   alpha: number;
@@ -138,7 +138,7 @@ export interface AlphaEstimate {
 }
 
 export interface RespondentAnalysis {
-  respondent_id: number;
+  respondent_id: string;
   external_id: string | null;
   n_responses: number;
   residual_df: number;
@@ -149,8 +149,8 @@ export interface RespondentAnalysis {
 }
 
 export interface AnalyzeResponse {
-  survey_id: number;
-  design_id: number;
+  survey_id: string;
+  design_id: string;
   n_respondents: number;
   per_respondent: RespondentAnalysis[];
   aggregate: AlphaEstimate[] | null;
@@ -207,14 +207,14 @@ export const api = {
   listSurveys() {
     return get<SurveyOut[]>("/api/surveys");
   },
-  getSurvey(id: number) {
+  getSurvey(id: string) {
     return get<SurveyOut>(`/api/surveys/${id}`);
   },
   createSurvey(req: SurveyCreate) {
     return post<SurveyCreate, SurveyOut>("/api/surveys", req);
   },
   updateSurvey(
-    id: number,
+    id: string,
     req: { name?: string; description?: string | null },
   ) {
     return request<SurveyOut>(`/api/surveys/${id}`, {
@@ -222,13 +222,13 @@ export const api = {
       body: JSON.stringify(req),
     });
   },
-  deleteSurvey(id: number) {
+  deleteSurvey(id: string) {
     return request<void>(`/api/surveys/${id}`, { method: "DELETE" });
   },
 
   // designs
   generateDesign(
-    surveyId: number,
+    surveyId: string,
     req: { objective?: Objective; seed?: number; max_iter?: number } = {},
   ) {
     return post<typeof req, StoredDesignOut>(
@@ -238,7 +238,7 @@ export const api = {
   },
   // Persist a design with an explicit, caller-supplied comparison order.
   storeManualDesign(
-    surveyId: number,
+    surveyId: string,
     req: {
       objective?: Objective;
       seed?: number;
@@ -251,18 +251,18 @@ export const api = {
       req,
     );
   },
-  listDesigns(surveyId: number) {
+  listDesigns(surveyId: string) {
     return get<StoredDesignOut[]>(`/api/surveys/${surveyId}/designs`);
   },
 
   // respondents
-  createRespondent(surveyId: number, externalId?: string) {
+  createRespondent(surveyId: string, externalId?: string) {
     return post<{ external_id?: string }, RespondentOut>(
       `/api/surveys/${surveyId}/respondents`,
       { external_id: externalId },
     );
   },
-  submitResponses(respondentId: number, responses: ResponseSubmit[]) {
+  submitResponses(respondentId: string, responses: ResponseSubmit[]) {
     return post<{ responses: ResponseSubmit[] }, ResponseOut[]>(
       `/api/respondents/${respondentId}/responses`,
       { responses },
@@ -270,7 +270,7 @@ export const api = {
   },
 
   // analysis
-  analyze(surveyId: number, designId?: number) {
+  analyze(surveyId: string, designId?: string) {
     const q = designId !== undefined ? `?design_id=${designId}` : "";
     return post<Record<string, never>, AnalyzeResponse>(
       `/api/surveys/${surveyId}/analyze${q}`,

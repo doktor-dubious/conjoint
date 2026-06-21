@@ -13,13 +13,12 @@ Respondents fill in Responses against those Trials.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy import (
-    Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text,
-    UniqueConstraint, func,
+    Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, text,
 )
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -33,7 +32,6 @@ from .db import Base
 class Survey(Base):
     __tablename__ = "surveys"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(255))
     description: Mapped[Optional[str]] = mapped_column(Text)
     K: Mapped[int] = mapped_column(Integer)
@@ -44,9 +42,6 @@ class Survey(Base):
     # When true, each respondent sees the comparisons in a randomized order.
     randomize_order: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false", default=False
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
     )
 
     objects: Mapped[List[ObjectItem]] = relationship(
@@ -73,9 +68,8 @@ class ObjectItem(Base):
         UniqueConstraint("survey_id", "position", name="uq_object_position"),
     )
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    survey_id: Mapped[int] = mapped_column(
-        ForeignKey("surveys.id", ondelete="CASCADE"), index=True
+    survey_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("surveys.id", ondelete="CASCADE"), index=True
     )
     position: Mapped[int] = mapped_column(Integer)  # 0..K-1
     name: Mapped[str] = mapped_column(String(255))
@@ -93,9 +87,8 @@ class Design(Base):
 
     __tablename__ = "designs"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    survey_id: Mapped[int] = mapped_column(
-        ForeignKey("surveys.id", ondelete="CASCADE"), index=True
+    survey_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("surveys.id", ondelete="CASCADE"), index=True
     )
     objective: Mapped[str] = mapped_column(String(32))   # 'd-optimal' | 'min-max-var'
     seed: Mapped[int] = mapped_column(Integer)
@@ -109,10 +102,6 @@ class Design(Base):
     mean_var: Mapped[float] = mapped_column(Numeric(asdecimal=False))
     ratio: Mapped[float] = mapped_column(Numeric(asdecimal=False))
     spanning_trees: Mapped[int] = mapped_column(Integer)
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
 
     survey: Mapped[Survey] = relationship(back_populates="designs")
     trials: Mapped[List[Trial]] = relationship(
@@ -130,16 +119,15 @@ class Trial(Base):
         UniqueConstraint("design_id", "trial_number", name="uq_trial_number"),
     )
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    design_id: Mapped[int] = mapped_column(
-        ForeignKey("designs.id", ondelete="CASCADE"), index=True
+    design_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("designs.id", ondelete="CASCADE"), index=True
     )
     trial_number: Mapped[int] = mapped_column(Integer)  # 1..N, presentation order
-    left_id: Mapped[int] = mapped_column(
-        ForeignKey("objects.id", ondelete="RESTRICT")
+    left_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("objects.id", ondelete="RESTRICT")
     )
-    right_id: Mapped[int] = mapped_column(
-        ForeignKey("objects.id", ondelete="RESTRICT")
+    right_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("objects.id", ondelete="RESTRICT")
     )
 
     design: Mapped[Design] = relationship(back_populates="trials")
@@ -166,15 +154,14 @@ class Respondent(Base):
                          name="uq_respondent_external"),
     )
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    survey_id: Mapped[int] = mapped_column(
-        ForeignKey("surveys.id", ondelete="CASCADE"), index=True
+    survey_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("surveys.id", ondelete="CASCADE"), index=True
     )
     external_id: Mapped[Optional[str]] = mapped_column(String(255))
-    started_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+    started_at: Mapped[str | None] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
     )
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[Optional[str]] = mapped_column(DateTime(timezone=True))
 
     survey: Mapped[Survey] = relationship(back_populates="respondents")
     responses: Mapped[List[Response]] = relationship(
@@ -195,17 +182,16 @@ class Response(Base):
         UniqueConstraint("respondent_id", "trial_id", name="uq_response"),
     )
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    respondent_id: Mapped[int] = mapped_column(
-        ForeignKey("respondents.id", ondelete="CASCADE"), index=True
+    respondent_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("respondents.id", ondelete="CASCADE"), index=True
     )
-    trial_id: Mapped[int] = mapped_column(
-        ForeignKey("trials.id", ondelete="CASCADE"), index=True
+    trial_id: Mapped[str] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("trials.id", ondelete="CASCADE"), index=True
     )
     raw_value: Mapped[float] = mapped_column(Numeric(asdecimal=False))
     y: Mapped[float] = mapped_column(Numeric(asdecimal=False))
-    recorded_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+    recorded_at: Mapped[str | None] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()")
     )
 
     respondent: Mapped[Respondent] = relationship(back_populates="responses")
