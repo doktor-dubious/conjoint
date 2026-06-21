@@ -16,7 +16,8 @@ from __future__ import annotations
 from typing import List, Optional
 
 from sqlalchemy import (
-    Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, text,
+    Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text,
+    UniqueConstraint, text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship

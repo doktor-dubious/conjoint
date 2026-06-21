@@ -59,7 +59,7 @@ def list_surveys(db: Session = Depends(get_db)) -> list[Survey]:
 
 
 @router.get("/{survey_id}", response_model=SurveyOut)
-def get_survey(survey_id: int, db: Session = Depends(get_db)) -> Survey:
+def get_survey(survey_id: str, db: Session = Depends(get_db)) -> Survey:
     survey = db.get(Survey, survey_id)
     if not survey:
         raise HTTPException(404, "survey not found")
@@ -68,7 +68,7 @@ def get_survey(survey_id: int, db: Session = Depends(get_db)) -> Survey:
 
 @router.patch("/{survey_id}", response_model=SurveyOut)
 def update_survey(
-    survey_id: int,
+    survey_id: str,
     payload: SurveyUpdate,
     db: Session = Depends(get_db),
 ) -> Survey:
@@ -89,7 +89,7 @@ def update_survey(
 
 
 @router.delete("/{survey_id}", status_code=204)
-def delete_survey(survey_id: int, db: Session = Depends(get_db)) -> None:
+def delete_survey(survey_id: str, db: Session = Depends(get_db)) -> None:
     """Delete a test plan (survey + its objects, designs and trials).
 
     Refused with 409 if the plan has already been used to collect data
@@ -111,7 +111,7 @@ def delete_survey(survey_id: int, db: Session = Depends(get_db)) -> None:
 
 @router.post("/{survey_id}/design", response_model=StoredDesignOut, status_code=201)
 def generate_and_store_design(
-    survey_id: int,
+    survey_id: str,
     req: GenerateDesignRequest,
     db: Session = Depends(get_db),
 ) -> StoredDesignOut:
@@ -180,7 +180,7 @@ def generate_and_store_design(
     status_code=201,
 )
 def store_manual_design(
-    survey_id: int,
+    survey_id: str,
     req: ManualDesignRequest,
     db: Session = Depends(get_db),
 ) -> StoredDesignOut:
@@ -246,7 +246,7 @@ def store_manual_design(
 
 
 @router.get("/{survey_id}/designs", response_model=list[StoredDesignOut])
-def list_designs(survey_id: int, db: Session = Depends(get_db)) -> list[StoredDesignOut]:
+def list_designs(survey_id: str, db: Session = Depends(get_db)) -> list[StoredDesignOut]:
     stmt = (
         select(Design)
         .where(Design.survey_id == survey_id)
@@ -291,7 +291,7 @@ def list_designs(survey_id: int, db: Session = Depends(get_db)) -> list[StoredDe
 
 @router.post("/{survey_id}/respondents", response_model=RespondentOut, status_code=201)
 def create_respondent(
-    survey_id: int,
+    survey_id: str,
     payload: RespondentCreate,
     db: Session = Depends(get_db),
 ) -> Respondent:
@@ -308,7 +308,7 @@ def create_respondent(
 
 
 @router.get("/{survey_id}/respondents", response_model=list[RespondentOut])
-def list_respondents(survey_id: int, db: Session = Depends(get_db)) -> list[Respondent]:
+def list_respondents(survey_id: str, db: Session = Depends(get_db)) -> list[Respondent]:
     return list(
         db.execute(
             select(Respondent).where(Respondent.survey_id == survey_id)
@@ -327,7 +327,7 @@ resp_router = APIRouter(prefix="/api/respondents", tags=["responses"])
     status_code=201,
 )
 def submit_responses(
-    respondent_id: int,
+    respondent_id: str,
     payload: ResponseBatchSubmit,
     db: Session = Depends(get_db),
 ) -> list[ResponseOut]:

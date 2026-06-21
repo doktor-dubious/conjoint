@@ -17,8 +17,8 @@ router = APIRouter(prefix="/api/surveys", tags=["analysis"])
 
 @router.post("/{survey_id}/analyze", response_model=AnalyzeResponse)
 def analyze_survey(
-    survey_id: int,
-    design_id: int | None = None,
+    survey_id: str,
+    design_id: str | None = None,
     db: Session = Depends(get_db),
 ) -> AnalyzeResponse:
     """Fit OLS per respondent and aggregate.
