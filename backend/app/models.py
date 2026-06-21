@@ -17,8 +17,8 @@ from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy import (
-    DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint,
-    func,
+    Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text,
+    UniqueConstraint, func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -41,6 +41,10 @@ class Survey(Base):
     # Bipolar scale ends (slider). y = response - (scale_min + scale_max)/2
     scale_min: Mapped[float] = mapped_column(Numeric(asdecimal=False), default=-50.0)
     scale_max: Mapped[float] = mapped_column(Numeric(asdecimal=False), default=50.0)
+    # When true, each respondent sees the comparisons in a randomized order.
+    randomize_order: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", default=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -95,6 +99,9 @@ class Design(Base):
     )
     objective: Mapped[str] = mapped_column(String(32))   # 'd-optimal' | 'min-max-var'
     seed: Mapped[int] = mapped_column(Integer)
+    max_iter: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="500", default=500
+    )
 
     # Summary statistics (snapshot at generation time)
     min_var: Mapped[float] = mapped_column(Numeric(asdecimal=False))

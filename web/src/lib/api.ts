@@ -65,6 +65,7 @@ export interface SurveyOut {
   N: number;
   scale_min: number;
   scale_max: number;
+  randomize_order: boolean;
   created_at: string;
   objects: ObjectOut[];
 }
@@ -76,6 +77,7 @@ export interface SurveyCreate {
   N: number;
   scale_min: number;
   scale_max: number;
+  randomize_order?: boolean;
   object_names: string[];
 }
 
@@ -93,6 +95,7 @@ export interface StoredDesignOut {
   survey_id: number;
   objective: Objective;
   seed: number;
+  max_iter: number;
   min_var: number;
   max_var: number;
   mean_var: number;
@@ -210,6 +213,18 @@ export const api = {
   createSurvey(req: SurveyCreate) {
     return post<SurveyCreate, SurveyOut>("/api/surveys", req);
   },
+  updateSurvey(
+    id: number,
+    req: { name?: string; description?: string | null },
+  ) {
+    return request<SurveyOut>(`/api/surveys/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(req),
+    });
+  },
+  deleteSurvey(id: number) {
+    return request<void>(`/api/surveys/${id}`, { method: "DELETE" });
+  },
 
   // designs
   generateDesign(
@@ -218,6 +233,21 @@ export const api = {
   ) {
     return post<typeof req, StoredDesignOut>(
       `/api/surveys/${surveyId}/design`,
+      req,
+    );
+  },
+  // Persist a design with an explicit, caller-supplied comparison order.
+  storeManualDesign(
+    surveyId: number,
+    req: {
+      objective?: Objective;
+      seed?: number;
+      max_iter?: number;
+      edges: [number, number][];
+    },
+  ) {
+    return post<typeof req, StoredDesignOut>(
+      `/api/surveys/${surveyId}/design/manual`,
       req,
     );
   },

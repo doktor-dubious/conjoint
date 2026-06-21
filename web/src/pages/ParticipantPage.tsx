@@ -27,6 +27,9 @@ export function ParticipantPage() {
   const [design, setDesign] = useState<StoredDesignOut | null>(null);
   const [respondentId, setRespondentId] = useState<number | null>(null);
   const [trialIdx, setTrialIdx] = useState(0);
+  // Presentation order (indices into design.trials); shuffled per respondent
+  // when the survey has randomize_order enabled.
+  const [order, setOrder] = useState<number[]>([]);
   const [values, setValues] = useState<Record<number, number>>({});
   const [currentValue, setCurrentValue] = useState<number>(0);
   const [touched, setTouched] = useState(false);
@@ -42,6 +45,7 @@ export function ParticipantPage() {
           throw new Error("This survey has no design yet.");
         }
         setDesign(designs[0]); // listDesigns returns newest first
+        setOrder(designs[0].trials.map((_, i) => i));
         setPhase("intro");
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -54,10 +58,11 @@ export function ParticipantPage() {
     () => (survey ? (survey.scale_min + survey.scale_max) / 2 : 0),
     [survey],
   );
-  const currentTrial = useMemo(
-    () => (design ? design.trials[trialIdx] : null),
-    [design, trialIdx],
-  );
+  const currentTrial = useMemo(() => {
+    if (!design) return null;
+    const idx = order[trialIdx] ?? trialIdx;
+    return design.trials[idx] ?? null;
+  }, [design, order, trialIdx]);
 
   // Reset slider for each new trial; preserve revisits
   useEffect(() => {
@@ -77,6 +82,10 @@ export function ParticipantPage() {
       setRespondentId(r.id);
       setTrialIdx(0);
       setValues({});
+      if (design) {
+        const idents = design.trials.map((_, i) => i);
+        setOrder(survey?.randomize_order ? shuffle(idents) : idents);
+      }
       setPhase("rating");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -274,4 +283,14 @@ function ThankYou({ surveyId }: { surveyId: number }) {
       </Card>
     </div>
   );
+}
+
+// Fisher–Yates shuffle (returns a new array). Used for per-respondent ordering.
+function shuffle<T>(arr: T[]): T[] {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }

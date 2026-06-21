@@ -13,7 +13,9 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://conjoint:conjoint@db:5432/conjoint
     ports:
-      - "8000:8000"
+      # Host 8000 is taken on this server; expose api on 8088 instead.
+      # Container-internal port stays 8000 (web proxies to api:8000).
+      - "8088:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -35,7 +37,9 @@ services:
       POSTGRES_PASSWORD: conjoint
       POSTGRES_DB: conjoint
     ports:
-      - "5432:5432"
+      # Host 5432-5435 are taken by another Postgres cluster; expose on 5436.
+      # Container-internal port stays 5432 (api connects to db:5432).
+      - "5436:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

@@ -14,8 +14,9 @@ from ..models import (
     Design, ObjectItem, Respondent, Response, Survey, Trial,
 )
 from ..schemas import (
-    GenerateDesignRequest, RespondentCreate, RespondentOut, ResponseBatchSubmit,
-    ResponseOut, StoredDesignOut, StoredTrialOut, SurveyCreate, SurveyOut,
+    GenerateDesignRequest, ManualDesignRequest, RespondentCreate, RespondentOut,
+    ResponseBatchSubmit, ResponseOut, StoredDesignOut, StoredTrialOut,
+    SurveyCreate, SurveyOut, SurveyUpdate,
 )
 
 
@@ -35,6 +36,7 @@ def create_survey(payload: SurveyCreate, db: Session = Depends(get_db)) -> Surve
         description=payload.description,
         K=payload.K, N=payload.N,
         scale_min=payload.scale_min, scale_max=payload.scale_max,
+        randomize_order=payload.randomize_order,
         objects=[
             ObjectItem(position=i, name=name)
             for i, name in enumerate(payload.object_names)
@@ -62,6 +64,47 @@ def get_survey(survey_id: int, db: Session = Depends(get_db)) -> Survey:
     if not survey:
         raise HTTPException(404, "survey not found")
     return survey
+
+
+@router.patch("/{survey_id}", response_model=SurveyOut)
+def update_survey(
+    survey_id: int,
+    payload: SurveyUpdate,
+    db: Session = Depends(get_db),
+) -> Survey:
+    """Update editable test-plan metadata (name, description)."""
+    survey = db.get(Survey, survey_id)
+    if not survey:
+        raise HTTPException(404, "survey not found")
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(400, "name cannot be empty")
+        survey.name = name
+    if payload.description is not None:
+        survey.description = payload.description or None
+    db.commit()
+    db.refresh(survey)
+    return survey
+
+
+@router.delete("/{survey_id}", status_code=204)
+def delete_survey(survey_id: int, db: Session = Depends(get_db)) -> None:
+    """Delete a test plan (survey + its objects, designs and trials).
+
+    Refused with 409 if the plan has already been used to collect data
+    (it has respondents), so finalized results are never silently lost.
+    """
+    survey = db.get(Survey, survey_id)
+    if not survey:
+        raise HTTPException(404, "survey not found")
+    if survey.respondents:
+        raise HTTPException(
+            409,
+            "test plan has respondents and cannot be deleted",
+        )
+    db.delete(survey)
+    db.commit()
 
 
 # ---------- Designs ----------
@@ -94,6 +137,7 @@ def generate_and_store_design(
         survey_id=survey.id,
         objective=req.objective,
         seed=req.seed,
+        max_iter=req.max_iter,
         min_var=stats["min"], max_var=stats["max"], mean_var=stats["mean"],
         ratio=stats["ratio"], spanning_trees=stats["spanning_trees"],
         trials=[
@@ -113,6 +157,78 @@ def generate_and_store_design(
     return StoredDesignOut(
         id=design.id, survey_id=design.survey_id,
         objective=design.objective, seed=design.seed,
+        max_iter=design.max_iter,
+        min_var=design.min_var, max_var=design.max_var,
+        mean_var=design.mean_var, ratio=design.ratio,
+        spanning_trees=design.spanning_trees,
+        created_at=design.created_at,
+        trials=[
+            StoredTrialOut(
+                id=t.id, trial_number=t.trial_number,
+                left_id=t.left_id, right_id=t.right_id,
+                left_name=name_by_id[t.left_id],
+                right_name=name_by_id[t.right_id],
+            )
+            for t in sorted(design.trials, key=lambda x: x.trial_number)
+        ],
+    )
+
+
+@router.post(
+    "/{survey_id}/design/manual",
+    response_model=StoredDesignOut,
+    status_code=201,
+)
+def store_manual_design(
+    survey_id: int,
+    req: ManualDesignRequest,
+    db: Session = Depends(get_db),
+) -> StoredDesignOut:
+    """Persist a design with an explicit, caller-supplied comparison order.
+
+    Reordering rows leaves X'X unchanged, so the design is statistically
+    identical to the seed-generated one — only the presentation order differs.
+    """
+    survey = db.get(Survey, survey_id)
+    if not survey:
+        raise HTTPException(404, "survey not found")
+    objects = sorted(survey.objects, key=lambda o: o.position)
+    if len(objects) != survey.K:
+        raise HTTPException(500, "survey has wrong number of objects")
+
+    directed = [(int(L), int(R)) for L, R in req.edges]
+    for L, R in directed:
+        if not (0 <= L < survey.K and 0 <= R < survey.K) or L == R:
+            raise HTTPException(400, f"invalid edge ({L}, {R}) for K={survey.K}")
+
+    undirected = [(min(a, b), max(a, b)) for a, b in directed]
+    stats = variance_stats(survey.K, undirected)
+
+    design = Design(
+        survey_id=survey.id,
+        objective=req.objective,
+        seed=req.seed,
+        max_iter=req.max_iter,
+        min_var=stats["min"], max_var=stats["max"], mean_var=stats["mean"],
+        ratio=stats["ratio"], spanning_trees=stats["spanning_trees"],
+        trials=[
+            Trial(
+                trial_number=t,
+                left_id=objects[L].id,
+                right_id=objects[R].id,
+            )
+            for t, (L, R) in enumerate(directed, 1)
+        ],
+    )
+    db.add(design)
+    db.commit()
+    db.refresh(design)
+
+    name_by_id = {o.id: o.name for o in objects}
+    return StoredDesignOut(
+        id=design.id, survey_id=design.survey_id,
+        objective=design.objective, seed=design.seed,
+        max_iter=design.max_iter,
         min_var=design.min_var, max_var=design.max_var,
         mean_var=design.mean_var, ratio=design.ratio,
         spanning_trees=design.spanning_trees,
@@ -153,6 +269,7 @@ def list_designs(survey_id: int, db: Session = Depends(get_db)) -> list[StoredDe
         StoredDesignOut(
             id=d.id, survey_id=d.survey_id,
             objective=d.objective, seed=d.seed,
+            max_iter=d.max_iter,
             min_var=d.min_var, max_var=d.max_var, mean_var=d.mean_var,
             ratio=d.ratio, spanning_trees=d.spanning_trees,
             created_at=d.created_at,

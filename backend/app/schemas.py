@@ -89,9 +89,15 @@ class SurveyCreate(BaseModel):
     N: int = Field(..., ge=2)
     scale_min: float = -50.0
     scale_max: float = 50.0
+    randomize_order: bool = False
     object_names: List[str] = Field(
         ..., description="length-K list of object display names"
     )
+
+
+class SurveyUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
 
 
 class ObjectOut(BaseModel):
@@ -110,6 +116,7 @@ class SurveyOut(BaseModel):
     N: int
     scale_min: float
     scale_max: float
+    randomize_order: bool
     created_at: datetime
     objects: List[ObjectOut]
 
@@ -118,6 +125,21 @@ class GenerateDesignRequest(BaseModel):
     objective: Objective = "d-optimal"
     seed: int = 0
     max_iter: int = Field(500, ge=0, le=5000)
+
+
+class ManualDesignRequest(BaseModel):
+    """Persist a design with an explicit, caller-supplied comparison order.
+
+    `edges` is the ordered list of (left_position, right_position) pairs,
+    0-indexed into the survey's objects. Used when the user has manually
+    reordered / shuffled the generated comparisons before finalizing.
+    """
+    objective: Objective = "d-optimal"
+    seed: int = 0
+    max_iter: int = Field(500, ge=0, le=5000)
+    edges: List[tuple[int, int]] = Field(
+        ..., description="ordered (left_position, right_position) pairs"
+    )
 
 
 class StoredTrialOut(BaseModel):
@@ -136,6 +158,7 @@ class StoredDesignOut(BaseModel):
     survey_id: int
     objective: str
     seed: int
+    max_iter: int
     min_var: float
     max_var: float
     mean_var: float
