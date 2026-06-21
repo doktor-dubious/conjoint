@@ -19,7 +19,7 @@ import {
 
 export function ResultsPage() {
   const { id } = useParams<{ id: string }>();
-  const surveyId = Number(id);
+  const surveyId = id ?? "";
 
   const [survey, setSurvey] = useState<SurveyOut | null>(null);
   const [result, setResult] = useState<AnalyzeResponse | null>(null);

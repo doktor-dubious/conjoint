@@ -17,7 +17,7 @@ import {
 
 export function SurveyDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const surveyId = Number(id);
+  const surveyId = id ?? "";
   const [survey, setSurvey] = useState<SurveyOut | null>(null);
   const [designs, setDesigns] = useState<StoredDesignOut[]>([]);
   const [generating, setGenerating] = useState(false);

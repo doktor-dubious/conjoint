@@ -19,18 +19,18 @@ type Phase = "loading" | "intro" | "rating" | "submitting" | "done" | "error";
 
 export function ParticipantPage() {
   const { id } = useParams<{ id: string }>();
-  const surveyId = Number(id);
+  const surveyId = id ?? "";
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [error, setError] = useState<string | null>(null);
   const [survey, setSurvey] = useState<SurveyOut | null>(null);
   const [design, setDesign] = useState<StoredDesignOut | null>(null);
-  const [respondentId, setRespondentId] = useState<number | null>(null);
+  const [respondentId, setRespondentId] = useState<string | null>(null);
   const [trialIdx, setTrialIdx] = useState(0);
   // Presentation order (indices into design.trials); shuffled per respondent
   // when the survey has randomize_order enabled.
   const [order, setOrder] = useState<number[]>([]);
-  const [values, setValues] = useState<Record<number, number>>({});
+  const [values, setValues] = useState<Record<string, number>>({});
   const [currentValue, setCurrentValue] = useState<number>(0);
   const [touched, setTouched] = useState(false);
 
@@ -248,7 +248,7 @@ function ErrorBox({
   surveyId,
 }: {
   message: string;
-  surveyId: number;
+  surveyId: string;
 }) {
   return (
     <div className="container max-w-2xl py-12 space-y-4">
@@ -262,7 +262,7 @@ function ErrorBox({
   );
 }
 
-function ThankYou({ surveyId }: { surveyId: number }) {
+function ThankYou({ surveyId }: { surveyId: string }) {
   return (
     <div className="container max-w-2xl py-12">
       <Card>

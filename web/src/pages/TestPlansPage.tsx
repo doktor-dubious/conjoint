@@ -149,14 +149,14 @@ export function TestPlansPage() {
   // Object position map → generic "O<n>" labels (uniform across all plans,
   // regardless of the names stored at creation time).
   const posById = useMemo(() => {
-    const m = new Map<number, number>();
+    const m = new Map<string, number>();
     selected?.objects.forEach((o) => m.set(o.id, o.position));
     return m;
   }, [selected]);
-  const oLabel = (objId: number) => `O${(posById.get(objId) ?? 0) + 1}`;
+  const oLabel = (objId: string) => `O${(posById.get(objId) ?? 0) + 1}`;
 
   const comparisonColumns = useMemo<DataTableColumn<StoredTrialOut>[]>(() => {
-    const label = (objId: number) => `O${(posById.get(objId) ?? 0) + 1}`;
+    const label = (objId: string) => `O${(posById.get(objId) ?? 0) + 1}`;
     return [
       {
         key: "n",
@@ -534,7 +534,7 @@ function StatRow({
   );
 }
 
-function CopyId({ id }: { id: number }) {
+function CopyId({ id }: { id: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <span className="inline-flex items-center gap-2">

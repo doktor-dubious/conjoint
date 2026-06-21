@@ -90,7 +90,7 @@ export function SurveyNewPage() {
 
   // Per-object definitions (text / description / image). Held in page state
   // until the survey-creation backend exists; keyed by object id.
-  const [objectDefs, setObjectDefs] = useState<Record<number, ObjectDef>>({});
+  const [objectDefs, setObjectDefs] = useState<Record<string, ObjectDef>>({});
   const [selectedObject, setSelectedObject] = useState<ObjectOut | null>(null);
   const [objTab, setObjTab] = useState<"text" | "image">("text");
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -148,7 +148,7 @@ export function SurveyNewPage() {
     setObjectDefs({});
   }, [selected?.id]);
 
-  function updateDef(id: number, patch: Partial<ObjectDef>) {
+  function updateDef(id: string, patch: Partial<ObjectDef>) {
     setObjectDefs((prev) => ({
       ...prev,
       [id]: { ...(prev[id] ?? EMPTY_DEF), ...patch },
