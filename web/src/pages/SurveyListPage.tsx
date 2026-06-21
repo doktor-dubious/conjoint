@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, Copy, Download, ListChecks, Trash2 } from "lucide-react";
+import { Check, Copy, ListChecks, Trash2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -18,8 +18,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MaximizeToggle } from "@/components/ui/maximize-toggle";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import {
   ObjLabel,
   TestPlanObjectsPanel,
@@ -35,14 +37,6 @@ import {
 const TAB_CLASS = "rounded-none py-2.5";
 
 type DetailTab = "details" | "core" | "objects" | "comparisons" | "actions";
-
-function slugify(s: string): string {
-  return s
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}
 
 const SURVEY_COLUMNS: DataTableColumn<SurveyOut>[] = [
   {
@@ -140,6 +134,12 @@ export function SurveyListPage() {
   const [design, setDesign] = useState<StoredDesignOut | null>(null);
   const [sourcePlanName, setSourcePlanName] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("details");
+  const [maximized, setMaximized] = useState(
+    () => localStorage.getItem("surveys_detail_max") === "1",
+  );
+  useEffect(() => {
+    localStorage.setItem("surveys_detail_max", maximized ? "1" : "0");
+  }, [maximized]);
 
   // Read-only object definitions for the shared panel (from stored objects).
   const objectValues = useMemo<Record<string, ObjectValues>>(() => {
@@ -162,8 +162,17 @@ export function SurveyListPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const [saveOpen, setSaveOpen] = useState(false);
-  const [saveName, setSaveName] = useState("");
+  const [importNote, setImportNote] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportNote(
+      `Selected “${file.name}” — response-data import is not wired to the backend yet.`,
+    );
+    e.target.value = "";
+  }
 
   // Editable detail fields (Details tab).
   const [editName, setEditName] = useState("");
@@ -257,32 +266,6 @@ export function SurveyListPage() {
     }
   }
 
-  function openSave() {
-    setSaveName(`${slugify(selected?.name ?? "") || "survey"}.csv`);
-    setSaveOpen(true);
-  }
-
-  function doSave() {
-    if (!design) return;
-    const header = "trial,left,right,left_id,right_id";
-    const rows = design.trials.map(
-      (t) =>
-        `${t.trial_number},${t.left_name},${t.right_name},${t.left_id},${t.right_id}`,
-    );
-    const blob = new Blob([[header, ...rows].join("\n")], {
-      type: "text/csv;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = saveName.endsWith(".csv") ? saveName : `${saveName}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    setSaveOpen(false);
-  }
-
   return (
     <div className="w-full px-6 py-8">
       {error && (
@@ -292,23 +275,25 @@ export function SurveyListPage() {
       )}
 
       {/* ── Master table ── */}
-      <DataTable
-        rows={surveys}
-        columns={SURVEY_COLUMNS}
-        getRowId={(s) => s.id}
-        getSearchText={(s) => s.name}
-        activeId={selected?.id ?? null}
-        onRowClick={selectSurvey}
-        loading={loading}
-        emptyText="No saved surveys yet."
-        hideCount
-        initialSortKey="created"
-        initialSortDir="desc"
-      />
+      <div className={cn(selected && maximized && "hidden")}>
+        <DataTable
+          rows={surveys}
+          columns={SURVEY_COLUMNS}
+          getRowId={(s) => s.id}
+          getSearchText={(s) => s.name}
+          activeId={selected?.id ?? null}
+          onRowClick={selectSurvey}
+          loading={loading}
+          emptyText="No saved surveys yet."
+          hideCount
+          initialSortKey="created"
+          initialSortDir="desc"
+        />
+      </div>
 
       {/* ── Detail pane ── */}
       {selected && (
-        <div className="mt-8 border-t pt-6">
+        <div className={cn(maximized ? "" : "mt-8 border-t pt-6")}>
           <Tabs
             value={detailTab}
             onValueChange={(v) => setDetailTab(v as DetailTab)}
@@ -334,6 +319,11 @@ export function SurveyListPage() {
                 <TabsTrigger value="actions" className={TAB_CLASS}>
                   Actions
                 </TabsTrigger>
+                <MaximizeToggle
+                  maximized={maximized}
+                  onToggle={() => setMaximized((v) => !v)}
+                  className="ml-auto mb-1.5 pl-3 pr-2"
+                />
               </TabsList>
               <div
                 className="absolute bottom-0 h-0.5 bg-foreground transition-all duration-300 ease-in-out"
@@ -440,39 +430,7 @@ export function SurveyListPage() {
 
             {/* Actions */}
             <TabsContent value="actions" className="mt-6 max-w-2xl space-y-4">
-              <div className="flex items-center justify-between gap-4 rounded-md border p-4">
-                <div>
-                  <p className="text-sm font-semibold">Collect responses</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Open the participant view or review the analysis.
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button asChild variant="outline">
-                    <Link to={`/surveys/${selected.id}/participate`}>
-                      <ListChecks className="h-4 w-4" />
-                      Participate
-                    </Link>
-                  </Button>
-                  <Button asChild variant="outline">
-                    <Link to={`/surveys/${selected.id}/results`}>Results</Link>
-                  </Button>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between gap-4 rounded-md border p-4">
-                <div>
-                  <p className="text-sm font-semibold">Save to File</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Download the comparisons as a CSV file.
-                  </p>
-                </div>
-                <Button variant="outline" onClick={openSave} disabled={!design}>
-                  <Download className="h-4 w-4" />
-                  Save to File
-                </Button>
-              </div>
-
+              {/* Delete (first) */}
               <div className="flex items-center justify-between gap-4 rounded-md border border-destructive/30 bg-destructive/5 p-4">
                 <div>
                   <p className="text-sm font-semibold text-destructive">
@@ -488,6 +446,56 @@ export function SurveyListPage() {
                   <Trash2 className="h-4 w-4" />
                   Delete
                 </Button>
+              </div>
+
+              {/* Import survey data */}
+              <div className="flex items-center justify-between gap-4 rounded-md border p-4">
+                <div>
+                  <p className="text-sm font-semibold">Import Survey data</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Upload collected responses for this survey from a file.
+                  </p>
+                  {importNote && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {importNote}
+                    </p>
+                  )}
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => importInputRef.current?.click()}
+                >
+                  <Upload className="h-4 w-4" />
+                  Import data
+                </Button>
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".csv,.xlsx,.json"
+                  className="hidden"
+                  onChange={onImportFile}
+                />
+              </div>
+
+              {/* Collect responses (bottom) */}
+              <div className="flex items-center justify-between gap-4 rounded-md border p-4">
+                <div>
+                  <p className="text-sm font-semibold">Collect Responses</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Open the participant view or review the analysis.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button asChild variant="outline">
+                    <Link to={`/surveys/${selected.id}/participate`}>
+                      <ListChecks className="h-4 w-4" />
+                      Participate
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link to={`/surveys/${selected.id}/results`}>Results</Link>
+                  </Button>
+                </div>
               </div>
             </TabsContent>
           </Tabs>
@@ -546,37 +554,6 @@ export function SurveyListPage() {
               }
             >
               {deleting ? "Deleting…" : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Save-to-file dialog ── */}
-      <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Save to file</DialogTitle>
-            <DialogDescription>
-              Choose a filename for the CSV file.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-1.5 py-2">
-            <Label htmlFor="saveName" className="text-xs text-muted-foreground">
-              Filename
-            </Label>
-            <Input
-              id="saveName"
-              value={saveName}
-              onChange={(e) => setSaveName(e.target.value)}
-              placeholder="survey.csv"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSaveOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={doSave} disabled={!saveName.trim()}>
-              Save
             </Button>
           </DialogFooter>
         </DialogContent>

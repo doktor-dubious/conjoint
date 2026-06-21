@@ -17,8 +17,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MaximizeToggle } from "@/components/ui/maximize-toggle";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import {
   api,
   type StoredDesignOut,
@@ -96,6 +98,12 @@ export function TestPlansPage() {
   const [selected, setSelected] = useState<SurveyOut | null>(null);
   const [design, setDesign] = useState<StoredDesignOut | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("details");
+  const [maximized, setMaximized] = useState(
+    () => localStorage.getItem("testplans_detail_max") === "1",
+  );
+  useEffect(() => {
+    localStorage.setItem("testplans_detail_max", maximized ? "1" : "0");
+  }, [maximized]);
 
   // Dialogs
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -274,23 +282,25 @@ export function TestPlansPage() {
       )}
 
       {/* ── Master table ── */}
-      <DataTable
-        rows={plans}
-        columns={PLAN_COLUMNS}
-        getRowId={(p) => p.id}
-        getSearchText={(p) => p.name}
-        activeId={selected?.id ?? null}
-        onRowClick={selectPlan}
-        loading={loading}
-        emptyText="No test plans yet."
-        hideCount
-        initialSortKey="created"
-        initialSortDir="desc"
-      />
+      <div className={cn(selected && maximized && "hidden")}>
+        <DataTable
+          rows={plans}
+          columns={PLAN_COLUMNS}
+          getRowId={(p) => p.id}
+          getSearchText={(p) => p.name}
+          activeId={selected?.id ?? null}
+          onRowClick={selectPlan}
+          loading={loading}
+          emptyText="No test plans yet."
+          hideCount
+          initialSortKey="created"
+          initialSortDir="desc"
+        />
+      </div>
 
       {/* ── Detail pane ── */}
       {selected && (
-        <div className="mt-8 border-t pt-6">
+        <div className={cn(maximized ? "" : "mt-8 border-t pt-6")}>
           <Tabs
             value={detailTab}
             onValueChange={(v) => setDetailTab(v as DetailTab)}
@@ -313,6 +323,11 @@ export function TestPlansPage() {
                 <TabsTrigger value="actions" className={TAB_CLASS}>
                   Actions
                 </TabsTrigger>
+                <MaximizeToggle
+                  maximized={maximized}
+                  onToggle={() => setMaximized((v) => !v)}
+                  className="ml-auto mb-1.5 pl-3 pr-2"
+                />
               </TabsList>
               <div
                 className="absolute bottom-0 h-0.5 bg-foreground transition-all duration-300 ease-in-out"
