@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ImageIcon, Upload } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DataTable,
@@ -15,6 +17,11 @@ import { api, type ObjectOut, type SurveyOut } from "@/lib/api";
 const TAB_CLASS = "rounded-none py-2.5";
 
 type TabKey = "core" | "plan" | "objects" | "respondent";
+
+type ObjectDef = { text: string; description: string; image: string | null };
+const EMPTY_DEF: ObjectDef = { text: "", description: "", image: null };
+const isDefined = (d: ObjectDef | undefined): boolean =>
+  !!d && (d.text.trim().length > 0 || d.image !== null);
 
 const PLAN_COLUMNS: DataTableColumn<SurveyOut>[] = [
   {
@@ -66,25 +73,6 @@ const PLAN_COLUMNS: DataTableColumn<SurveyOut>[] = [
   },
 ];
 
-const OBJECT_COLUMNS: DataTableColumn<ObjectOut>[] = [
-  {
-    key: "pos",
-    header: "#",
-    sortable: true,
-    sortValue: (o) => o.position,
-    render: (o) => o.position + 1,
-    className: "tabular-nums text-muted-foreground",
-    headClassName: "w-16",
-  },
-  {
-    key: "name",
-    header: "Name",
-    sortable: true,
-    sortValue: (o) => o.name.toLowerCase(),
-    render: (o) => <span className="font-medium">{o.name}</span>,
-  },
-];
-
 export function SurveyNewPage() {
   const navigate = useNavigate();
 
@@ -98,6 +86,13 @@ export function SurveyNewPage() {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<SurveyOut | null>(null);
 
+  // Per-object definitions (text / description / image). Held in page state
+  // until the survey-creation backend exists; keyed by object id.
+  const [objectDefs, setObjectDefs] = useState<Record<number, ObjectDef>>({});
+  const [selectedObject, setSelectedObject] = useState<ObjectOut | null>(null);
+  const [objTab, setObjTab] = useState<"text" | "image">("text");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     api
       .listSurveys()
@@ -105,6 +100,29 @@ export function SurveyNewPage() {
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
   }, []);
+
+  // Switching test plan clears the object definitions + open detail.
+  useEffect(() => {
+    setSelectedObject(null);
+    setObjectDefs({});
+  }, [selected?.id]);
+
+  function updateDef(id: number, patch: Partial<ObjectDef>) {
+    setObjectDefs((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] ?? EMPTY_DEF), ...patch },
+    }));
+  }
+
+  function onImageFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !selectedObject) return;
+    const reader = new FileReader();
+    reader.onload = () =>
+      updateDef(selectedObject.id, { image: String(reader.result) });
+    reader.readAsDataURL(file);
+    e.target.value = ""; // allow re-selecting the same file
+  }
 
   // Animated underline that slides under the active tab.
   const tabsListRef = useRef<HTMLDivElement>(null);
@@ -120,6 +138,52 @@ export function SurveyNewPage() {
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, [activeTab]);
+
+  // Underline for the object detail tabs (Text / Image).
+  const objTabsRef = useRef<HTMLDivElement>(null);
+  const [objIndicator, setObjIndicator] = useState({ left: 0, width: 0 });
+  useEffect(() => {
+    const list = objTabsRef.current;
+    if (!list) return;
+    const el = list.querySelector<HTMLElement>("[data-state='active']");
+    if (el) setObjIndicator({ left: el.offsetLeft, width: el.offsetWidth });
+  }, [objTab, selectedObject]);
+
+  const objectColumns = useMemo<DataTableColumn<ObjectOut>[]>(
+    () => [
+      {
+        key: "pos",
+        header: "#",
+        sortable: true,
+        sortValue: (o) => o.position,
+        render: (o) => o.position + 1,
+        className: "tabular-nums text-muted-foreground",
+        headClassName: "w-16",
+      },
+      {
+        key: "name",
+        header: "Name",
+        sortable: true,
+        sortValue: (o) => o.name.toLowerCase(),
+        render: (o) => <span className="font-medium">{o.name}</span>,
+      },
+      {
+        key: "status",
+        header: "Status",
+        render: (o) =>
+          isDefined(objectDefs[o.id]) ? (
+            <Badge>Defined</Badge>
+          ) : (
+            <Badge variant="secondary">Undefined</Badge>
+          ),
+        headClassName: "w-32",
+      },
+    ],
+    [objectDefs],
+  );
+
+  const currentDef =
+    (selectedObject && objectDefs[selectedObject.id]) || EMPTY_DEF;
 
   return (
     <div className="w-full px-6 py-8">
@@ -231,14 +295,135 @@ export function SurveyNewPage() {
               Select a test plan first (Test Plan tab).
             </div>
           ) : (
-            <DataTable
-              rows={selected.objects}
-              columns={OBJECT_COLUMNS}
-              getRowId={(o) => o.id}
-              getSearchText={(o) => o.name}
-              emptyText="No objects."
-              initialSortKey="pos"
-            />
+            <>
+              <DataTable
+                rows={selected.objects}
+                columns={objectColumns}
+                getRowId={(o) => o.id}
+                getSearchText={(o) => o.name}
+                activeId={selectedObject?.id ?? null}
+                onRowClick={setSelectedObject}
+                emptyText="No objects."
+                initialSortKey="pos"
+              />
+
+              {/* Object detail pane */}
+              {selectedObject && (
+                <div className="mt-8 border-t pt-6">
+                  <p className="mb-4 text-sm">
+                    Defining{" "}
+                    <span className="font-medium">{selectedObject.name}</span>
+                  </p>
+                  <Tabs
+                    value={objTab}
+                    onValueChange={(v) => setObjTab(v as "text" | "image")}
+                    className="gap-0"
+                  >
+                    <div className="relative w-full">
+                      <TabsList
+                        ref={objTabsRef}
+                        className="flex h-auto w-full rounded-none border-b border-border bg-transparent p-0"
+                      >
+                        <TabsTrigger value="text" className={TAB_CLASS}>
+                          Text
+                        </TabsTrigger>
+                        <TabsTrigger value="image" className={TAB_CLASS}>
+                          Image
+                        </TabsTrigger>
+                      </TabsList>
+                      <div
+                        className="absolute bottom-0 h-0.5 bg-foreground transition-all duration-300 ease-in-out"
+                        style={{
+                          left: objIndicator.left,
+                          width: objIndicator.width,
+                        }}
+                      />
+                    </div>
+
+                    {/* Text */}
+                    <TabsContent value="text" className="mt-6">
+                      <div className="max-w-2xl space-y-5">
+                        <Field label="Object Text" htmlFor="obj-text">
+                          <Input
+                            id="obj-text"
+                            value={currentDef.text}
+                            placeholder="e.g. Pernille"
+                            onChange={(e) =>
+                              updateDef(selectedObject.id, {
+                                text: e.target.value,
+                              })
+                            }
+                          />
+                        </Field>
+                        <Field
+                          label="Object Description"
+                          htmlFor="obj-description"
+                        >
+                          <Textarea
+                            id="obj-description"
+                            value={currentDef.description}
+                            placeholder="Optional longer description shown to respondents"
+                            onChange={(e) =>
+                              updateDef(selectedObject.id, {
+                                description: e.target.value,
+                              })
+                            }
+                          />
+                        </Field>
+                      </div>
+                    </TabsContent>
+
+                    {/* Image */}
+                    <TabsContent value="image" className="mt-6">
+                      <div className="max-w-2xl space-y-4">
+                        <div className="flex h-56 w-full items-center justify-center overflow-hidden rounded-md border bg-muted/20">
+                          {currentDef.image ? (
+                            <img
+                              src={currentDef.image}
+                              alt={selectedObject.name}
+                              className="max-h-full max-w-full object-contain"
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                              <ImageIcon className="h-8 w-8 opacity-50" />
+                              <span className="text-sm">No image uploaded</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => fileInputRef.current?.click()}
+                          >
+                            <Upload className="h-4 w-4" />
+                            {currentDef.image ? "Replace image" : "Upload image"}
+                          </Button>
+                          {currentDef.image && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={() =>
+                                updateDef(selectedObject.id, { image: null })
+                              }
+                            >
+                              Remove
+                            </Button>
+                          )}
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={onImageFile}
+                          />
+                        </div>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </div>
+              )}
+            </>
           )}
         </TabsContent>
 
