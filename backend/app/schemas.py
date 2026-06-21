@@ -204,6 +204,22 @@ class RespondentOut(BaseModel):
     completed_at: Optional[datetime]
 
 
+class SurveyDataRow(BaseModel):
+    """One imported/collected response, flattened with respondent + comparison."""
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    respondent_id: str
+    external_id: Optional[str]
+    trial_number: int
+    left_position: int
+    right_position: int
+    left_name: str
+    right_name: str
+    raw_value: float
+    y: float
+    recorded_at: Optional[datetime]
+
+
 class ImportResult(BaseModel):
     respondents_added: int
     responses_added: int

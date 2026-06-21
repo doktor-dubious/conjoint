@@ -97,6 +97,20 @@ export interface ImportResult {
   errors: string[];
 }
 
+export interface SurveyDataRow {
+  id: string;
+  respondent_id: string;
+  external_id: string | null;
+  trial_number: number;
+  left_position: number;
+  right_position: number;
+  left_name: string;
+  right_name: string;
+  raw_value: number;
+  y: number;
+  recorded_at: string | null;
+}
+
 export interface SurveyCreate {
   name: string;
   description?: string;
@@ -317,6 +331,9 @@ export const api = {
   },
   listDesigns(surveyId: string) {
     return get<StoredDesignOut[]>(`/api/surveys/${surveyId}/designs`);
+  },
+  listResponses(surveyId: string) {
+    return get<SurveyDataRow[]>(`/api/surveys/${surveyId}/responses`);
   },
 
   // respondents

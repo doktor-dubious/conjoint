@@ -31,12 +31,75 @@ import {
   api,
   type StoredDesignOut,
   type StoredTrialOut,
+  type SurveyDataRow,
   type SurveyOut,
 } from "@/lib/api";
 
 const TAB_CLASS = "rounded-none py-2.5";
 
-type DetailTab = "details" | "core" | "objects" | "comparisons" | "actions";
+type DetailTab =
+  | "details"
+  | "core"
+  | "objects"
+  | "comparisons"
+  | "data"
+  | "actions";
+
+const SURVEY_DATA_COLUMNS: DataTableColumn<SurveyDataRow>[] = [
+  {
+    key: "id",
+    header: "Id",
+    sortable: true,
+    sortValue: (r) => r.external_id ?? "",
+    render: (r) => (
+      <span className="font-mono text-xs">{r.external_id ?? "—"}</span>
+    ),
+  },
+  {
+    key: "trial",
+    header: "#",
+    sortable: true,
+    sortValue: (r) => r.trial_number,
+    render: (r) => (
+      <span className="tabular-nums text-muted-foreground">
+        {r.trial_number}
+      </span>
+    ),
+    headClassName: "w-12",
+  },
+  {
+    key: "left",
+    header: "Left",
+    sortable: true,
+    sortValue: (r) => r.left_name.toLowerCase(),
+    render: (r) => (
+      <span className="font-medium">
+        <ObjLabel name={r.left_name} />
+      </span>
+    ),
+  },
+  {
+    key: "right",
+    header: "Right",
+    sortable: true,
+    sortValue: (r) => r.right_name.toLowerCase(),
+    render: (r) => (
+      <span className="font-medium">
+        <ObjLabel name={r.right_name} />
+      </span>
+    ),
+  },
+  {
+    key: "value",
+    header: "Value",
+    sortable: true,
+    sortValue: (r) => r.raw_value,
+    render: (r) => (
+      <span className="tabular-nums">{r.raw_value.toFixed(2)}</span>
+    ),
+    headClassName: "w-24",
+  },
+];
 
 const SURVEY_COLUMNS: DataTableColumn<SurveyOut>[] = [
   {
@@ -132,6 +195,7 @@ export function SurveyListPage() {
 
   const [selected, setSelected] = useState<SurveyOut | null>(null);
   const [design, setDesign] = useState<StoredDesignOut | null>(null);
+  const [surveyData, setSurveyData] = useState<SurveyDataRow[]>([]);
   const [sourcePlanName, setSourcePlanName] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<DetailTab>("details");
   const [maximized, setMaximized] = useState(
@@ -220,12 +284,18 @@ export function SurveyListPage() {
     setSelected(survey);
     setDetailTab("details");
     setDesign(null);
+    setSurveyData([]);
     setSourcePlanName(null);
     try {
       const designs = await api.listDesigns(survey.id);
       setDesign(designs[0] ?? null);
     } catch {
       setDesign(null);
+    }
+    try {
+      setSurveyData(await api.listResponses(survey.id));
+    } catch {
+      setSurveyData([]);
     }
     if (survey.source_test_plan_id) {
       try {
@@ -330,6 +400,9 @@ export function SurveyListPage() {
                 </TabsTrigger>
                 <TabsTrigger value="comparisons" className={TAB_CLASS}>
                   Comparisons
+                </TabsTrigger>
+                <TabsTrigger value="data" className={TAB_CLASS}>
+                  Survey Data
                 </TabsTrigger>
                 <TabsTrigger value="actions" className={TAB_CLASS}>
                   Actions
@@ -441,6 +514,20 @@ export function SurveyListPage() {
                   initialSortKey="n"
                 />
               )}
+            </TabsContent>
+
+            {/* Survey Data (all collected/imported responses) */}
+            <TabsContent value="data" className="mt-6">
+              <DataTable
+                rows={surveyData}
+                columns={SURVEY_DATA_COLUMNS}
+                getRowId={(r) => r.id}
+                getSearchText={(r) =>
+                  `${r.external_id ?? ""} ${r.trial_number} ${r.left_name} ${r.right_name} ${r.raw_value}`
+                }
+                emptyText="No response data yet. Import data from the Actions tab."
+                initialSortKey="id"
+              />
             </TabsContent>
 
             {/* Actions */}

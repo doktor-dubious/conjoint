@@ -19,7 +19,8 @@ from ..models import (
 from ..schemas import (
     GenerateDesignRequest, ImportResult, ManualDesignRequest, RespondentCreate,
     RespondentOut, ResponseBatchSubmit, ResponseOut, StoredDesignOut,
-    StoredTrialOut, SurveyCreate, SurveyInstanceCreate, SurveyOut, SurveyUpdate,
+    StoredTrialOut, SurveyCreate, SurveyDataRow, SurveyInstanceCreate, SurveyOut,
+    SurveyUpdate,
 )
 
 
@@ -406,6 +407,42 @@ def list_respondents(survey_id: str, db: Session = Depends(get_db)) -> list[Resp
             select(Respondent).where(Respondent.survey_id == survey_id)
         ).scalars()
     )
+
+
+@router.get("/{survey_id}/responses", response_model=list[SurveyDataRow])
+def list_survey_responses(
+    survey_id: str, db: Session = Depends(get_db),
+) -> list[SurveyDataRow]:
+    """All collected/imported responses for a survey, flattened with the
+    respondent's external id and the comparison's object names/positions."""
+    survey = db.get(Survey, survey_id)
+    if not survey:
+        raise HTTPException(404, "survey not found")
+    obj = {o.id: o for o in survey.objects}
+    rows = db.execute(
+        select(
+            Response.id, Response.respondent_id, Response.raw_value, Response.y,
+            Response.recorded_at, Respondent.external_id,
+            Trial.trial_number, Trial.left_id, Trial.right_id,
+        )
+        .join(Respondent, Response.respondent_id == Respondent.id)
+        .join(Trial, Response.trial_id == Trial.id)
+        .where(Respondent.survey_id == survey_id)
+        .order_by(Respondent.external_id, Trial.trial_number)
+    ).all()
+    out: list[SurveyDataRow] = []
+    for r_id, resp_id, raw, y, rec, ext, tnum, left_id, right_id in rows:
+        lo = obj.get(left_id)
+        ro = obj.get(right_id)
+        out.append(SurveyDataRow(
+            id=r_id, respondent_id=resp_id, external_id=ext, trial_number=tnum,
+            left_position=lo.position if lo else -1,
+            right_position=ro.position if ro else -1,
+            left_name=lo.name if lo else "?",
+            right_name=ro.name if ro else "?",
+            raw_value=raw, y=y, recorded_at=rec,
+        ))
+    return out
 
 
 @router.post("/{survey_id}/responses/import", response_model=ImportResult)
