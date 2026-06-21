@@ -25,9 +25,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { InfoHint } from "@/components/ui/info-hint";
 import { MaximizeToggle } from "@/components/ui/maximize-toggle";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   ObjLabel,
@@ -206,6 +208,133 @@ const COMPARISON_COLUMNS: DataTableColumn<StoredTrialOut>[] = [
   },
 ];
 
+// ── Winner / ranking tallies (computed from the per-respondent part-worths) ──
+// Part-worths can tie (coarse data, saturated N=K model), so two conventions:
+//   strict     — count a respondent only if its order is unambiguous; ties go
+//                to a "Tie"/"Has ties" bucket
+//   fractional — split a tied respondent equally across the tied outcomes
+const TIE_EPS = 1e-4;
+
+const fmtCount = (v: number) =>
+  Math.abs(v - Math.round(v)) < 1e-9 ? String(Math.round(v)) : v.toFixed(2);
+
+function indexPermutations(n: number): number[][] {
+  const out: number[][] = [];
+  const go = (cur: number[], rest: number[]) => {
+    if (!rest.length) {
+      out.push(cur);
+      return;
+    }
+    rest.forEach((v, i) =>
+      go([...cur, v], [...rest.slice(0, i), ...rest.slice(i + 1)]),
+    );
+  };
+  go([], Array.from({ length: n }, (_, i) => i));
+  return out;
+}
+
+function shortCodes(names: string[]): string[] {
+  const first = names.map((n) => (n.trim()[0] || "?").toUpperCase());
+  return new Set(first).size === names.length
+    ? first
+    : names.map((_, i) => String(i + 1));
+}
+
+type Tallies = {
+  codes: { name: string; code: string }[];
+  winners: { name: string; strict: number; fractional: number }[];
+  winnerTie: number;
+  rankings: { key: string; strict: number; fractional: number }[];
+  rankingTie: number;
+  rankingTooBig: boolean;
+};
+
+function computeTallies(analysis: AnalyzeResponse): Tallies {
+  const objs = (
+    analysis.aggregate ??
+    analysis.per_respondent[0]?.alphas ??
+    []
+  ).map((o) => ({ object_id: o.object_id, name: o.name }));
+  const K = objs.length;
+  const codes = shortCodes(objs.map((o) => o.name));
+  const rankingTooBig = K > 4 || K < 1;
+  const perms = rankingTooBig ? [] : indexPermutations(K);
+
+  const strictWins: Record<string, number> = {};
+  const fracWins: Record<string, number> = {};
+  objs.forEach((o) => {
+    strictWins[o.name] = 0;
+    fracWins[o.name] = 0;
+  });
+  let winnerTie = 0;
+  const strictRank: Record<string, number> = {};
+  const fracRank: Record<string, number> = {};
+  let rankingTie = 0;
+
+  for (const r of analysis.per_respondent) {
+    const a = objs.map(
+      (o) => r.alphas.find((x) => x.object_id === o.object_id)?.alpha ?? 0,
+    );
+    const maxv = Math.max(...a);
+    const top = a
+      .map((v, i) => ({ v, i }))
+      .filter((x) => Math.abs(x.v - maxv) < TIE_EPS)
+      .map((x) => x.i);
+    if (top.length === 1) strictWins[objs[top[0]].name] += 1;
+    else winnerTie += 1;
+    top.forEach((i) => (fracWins[objs[i].name] += 1 / top.length));
+
+    if (!rankingTooBig) {
+      const distinct = new Set(a.map((v) => v.toFixed(4))).size === K;
+      if (distinct) {
+        const key = objs
+          .map((_, i) => i)
+          .sort((x, y) => a[y] - a[x])
+          .map((i) => codes[i])
+          .join("");
+        strictRank[key] = (strictRank[key] || 0) + 1;
+      } else {
+        rankingTie += 1;
+      }
+      const consistent = perms.filter((p) => {
+        for (let k = 0; k + 1 < p.length; k++)
+          if (a[p[k]] < a[p[k + 1]] - TIE_EPS) return false;
+        return true;
+      });
+      consistent.forEach((p) => {
+        const key = p.map((i) => codes[i]).join("");
+        fracRank[key] = (fracRank[key] || 0) + 1 / consistent.length;
+      });
+    }
+  }
+
+  const winners = objs
+    .map((o) => ({
+      name: o.name,
+      strict: strictWins[o.name],
+      fractional: fracWins[o.name],
+    }))
+    .sort((x, y) => y.fractional - x.fractional);
+
+  const keys = new Set([...Object.keys(strictRank), ...Object.keys(fracRank)]);
+  const rankings = [...keys]
+    .map((key) => ({
+      key,
+      strict: strictRank[key] || 0,
+      fractional: fracRank[key] || 0,
+    }))
+    .sort((x, y) => y.fractional - x.fractional || y.strict - x.strict);
+
+  return {
+    codes: objs.map((o, i) => ({ name: o.name, code: codes[i] })),
+    winners,
+    winnerTie,
+    rankings,
+    rankingTie,
+    rankingTooBig,
+  };
+}
+
 export function SurveyListPage() {
   const [surveys, setSurveys] = useState<SurveyOut[]>([]);
   const [loading, setLoading] = useState(true);
@@ -233,6 +362,11 @@ export function SurveyListPage() {
   }
 
   // Per-respondent estimate columns: Id, #, τ, then one α column per object.
+  const tallies = useMemo(
+    () => (analysis ? computeTallies(analysis) : null),
+    [analysis],
+  );
+
   const perRespondentColumns = useMemo<DataTableColumn<RespondentAnalysis>[]>(
     () => {
       const objs =
@@ -264,6 +398,7 @@ export function SurveyListPage() {
         {
           key: "tau",
           header: "τ",
+          hint: "τ (tau): the order/position effect — a systematic left–right bias added to every comparison. Model: y = (α_right − α_left) + τ + ε.",
           sortable: true,
           sortValue: (r) => r.tau,
           render: (r) => (
@@ -443,6 +578,7 @@ export function SurveyListPage() {
   }
 
   return (
+    <TooltipProvider delayDuration={150}>
     <div className="w-full px-6 py-8">
       {error && (
         <div className="mb-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
@@ -659,8 +795,9 @@ export function SurveyListPage() {
                 <div className="space-y-8">
                   {/* Population part-worths */}
                   <div>
-                    <h3 className="mb-1 text-sm font-semibold">
+                    <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold">
                       Population part-worths
+                      <InfoHint text="Part-worths (α) are the estimated utility of each object on the survey's bipolar scale, under a sum-to-zero constraint (they add to 0). Higher = more preferred. The values shown are the mean across all respondents." />
                     </h3>
                     <p className="mb-3 text-xs text-muted-foreground">
                       Mean utility per object across {analysis.n_respondents}{" "}
@@ -685,7 +822,13 @@ export function SurveyListPage() {
                                     Part-worth (α)
                                   </TableHead>
                                   <TableHead className="w-20 text-right">
-                                    SE
+                                    <span className="inline-flex items-center gap-1.5">
+                                      SE
+                                      <InfoHint
+                                        side="left"
+                                        text="Standard error of the estimate. Not available here: each respondent's model is saturated (K observations, K parameters → 0 residual degrees of freedom), so within-respondent error cannot be estimated."
+                                      />
+                                    </span>
                                   </TableHead>
                                 </TableRow>
                               </TableHeader>
@@ -718,6 +861,127 @@ export function SurveyListPage() {
                       );
                     })()}
                   </div>
+
+                  {/* Top-choice counts */}
+                  {tallies && (
+                    <div>
+                      <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold">
+                        Top-choice counts
+                        <InfoHint text="How often each object is a respondent's most-preferred (highest part-worth). “Strict” counts a respondent only when it has a single top object; a tie for the top goes to the Tie row. “Fractional” splits a tied top equally among the tied objects." />
+                      </h3>
+                      <p className="mb-3 text-xs text-muted-foreground">
+                        Two conventions for respondents tied for the top.
+                      </p>
+                      <div className="max-w-md overflow-hidden rounded-md border">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/50 hover:bg-muted/50">
+                              <TableHead className="pl-4">Top choice</TableHead>
+                              <TableHead className="text-right">Strict</TableHead>
+                              <TableHead className="w-28 text-right">
+                                Fractional
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {tallies.winners.map((w) => (
+                              <TableRow key={w.name}>
+                                <TableCell className="pl-4 font-medium">
+                                  {w.name}
+                                </TableCell>
+                                <TableCell className="text-right tabular-nums">
+                                  {w.strict}
+                                </TableCell>
+                                <TableCell className="text-right tabular-nums">
+                                  {fmtCount(w.fractional)}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                            {tallies.winnerTie > 0 && (
+                              <TableRow>
+                                <TableCell className="pl-4 text-muted-foreground">
+                                  Tie (no unique top)
+                                </TableCell>
+                                <TableCell className="text-right tabular-nums text-muted-foreground">
+                                  {tallies.winnerTie}
+                                </TableCell>
+                                <TableCell className="text-right tabular-nums text-muted-foreground">
+                                  —
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Ranking distribution */}
+                  {tallies && (
+                    <div>
+                      <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold">
+                        Ranking distribution
+                        <InfoHint text="Distribution of respondents' full preference orders (most→least preferred). “Strict” counts only respondents with an unambiguous order; any tie goes to the Has-ties row. “Fractional” splits a tied respondent equally across every total order consistent with its part-worths." />
+                      </h3>
+                      {tallies.rankingTooBig ? (
+                        <p className="text-sm text-muted-foreground">
+                          Omitted — too many possible orderings for{" "}
+                          {tallies.codes.length} objects.
+                        </p>
+                      ) : (
+                        <>
+                          <div className="max-w-md overflow-hidden rounded-md border">
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                  <TableHead className="pl-4">Ranking</TableHead>
+                                  <TableHead className="text-right">
+                                    Strict
+                                  </TableHead>
+                                  <TableHead className="w-28 text-right">
+                                    Fractional
+                                  </TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {tallies.rankings.map((r) => (
+                                  <TableRow key={r.key}>
+                                    <TableCell className="pl-4 font-mono font-medium">
+                                      {r.key}
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums">
+                                      {r.strict}
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums">
+                                      {fmtCount(r.fractional)}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                                {tallies.rankingTie > 0 && (
+                                  <TableRow>
+                                    <TableCell className="pl-4 text-muted-foreground">
+                                      Has ties
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                                      {tallies.rankingTie}
+                                    </TableCell>
+                                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                                      —
+                                    </TableCell>
+                                  </TableRow>
+                                )}
+                              </TableBody>
+                            </Table>
+                          </div>
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            {tallies.codes
+                              .map((c) => `${c.code} = ${c.name}`)
+                              .join(",  ")}
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  )}
 
                   {/* Per-respondent estimates */}
                   <div>
@@ -869,6 +1133,7 @@ export function SurveyListPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </TooltipProvider>
   );
 }
 
