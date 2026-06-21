@@ -73,6 +73,8 @@ const PLAN_COLUMNS: DataTableColumn<SurveyOut>[] = [
   },
 ];
 
+const STORAGE_KEY = "surveys_new_form";
+
 export function SurveyNewPage() {
   const navigate = useNavigate();
 
@@ -92,11 +94,50 @@ export function SurveyNewPage() {
   const [selectedObject, setSelectedObject] = useState<ObjectOut | null>(null);
   const [objTab, setObjTab] = useState<"text" | "image">("text");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isFirstRenderRef = useRef(true);
+
+  // Restore form state from localStorage on mount.
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        const state = JSON.parse(saved);
+        setName(state.name || "");
+        setDescription(state.description || "");
+        setObjectDefs(state.objectDefs || {});
+      } catch (e) {
+        // ignore parse errors
+      }
+    }
+    isFirstRenderRef.current = false;
+  }, []);
+
+  // Save form state to localStorage whenever it changes (but not on first render).
+  useEffect(() => {
+    if (isFirstRenderRef.current) return;
+    const state = { name, description, selectedId: selected?.id ?? null, objectDefs };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }, [name, description, selected?.id, objectDefs]);
 
   useEffect(() => {
     api
       .listSurveys()
-      .then(setPlans)
+      .then((surveys) => {
+        setPlans(surveys);
+        // Restore selected plan if it exists in the current list.
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          try {
+            const state = JSON.parse(saved);
+            if (state.selectedId) {
+              const restored = surveys.find((s) => s.id === state.selectedId);
+              if (restored) setSelected(restored);
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+      })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
   }, []);
