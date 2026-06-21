@@ -1,8 +1,11 @@
 """Persistent endpoints: surveys, designs, respondents, responses."""
 
+import csv
+import io
+from collections import defaultdict
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -14,9 +17,9 @@ from ..models import (
     Design, ObjectItem, Respondent, Response, Survey, Trial,
 )
 from ..schemas import (
-    GenerateDesignRequest, ManualDesignRequest, RespondentCreate, RespondentOut,
-    ResponseBatchSubmit, ResponseOut, StoredDesignOut, StoredTrialOut,
-    SurveyCreate, SurveyInstanceCreate, SurveyOut, SurveyUpdate,
+    GenerateDesignRequest, ImportResult, ManualDesignRequest, RespondentCreate,
+    RespondentOut, ResponseBatchSubmit, ResponseOut, StoredDesignOut,
+    StoredTrialOut, SurveyCreate, SurveyInstanceCreate, SurveyOut, SurveyUpdate,
 )
 
 
@@ -402,6 +405,155 @@ def list_respondents(survey_id: str, db: Session = Depends(get_db)) -> list[Resp
         db.execute(
             select(Respondent).where(Respondent.survey_id == survey_id)
         ).scalars()
+    )
+
+
+@router.post("/{survey_id}/responses/import", response_model=ImportResult)
+def import_responses(
+    survey_id: str,
+    file: UploadFile = File(...),
+    id_column: str = Form("Id"),
+    left_column: str = Form("left"),
+    right_column: str = Form("right"),
+    value_column: str = Form("yny"),
+    one_indexed: bool = Form(True),
+    db: Session = Depends(get_db),
+) -> ImportResult:
+    """Import respondent responses for an existing survey from a CSV.
+
+    Each row carries a respondent id, the left/right object *positions* of one
+    comparison, and the slider value. Rows are matched to the survey's design
+    trials by comparison direction. The value is stored as raw_value, with
+    y = raw_value - midpoint. Idempotent: respondents are keyed by external_id,
+    responses by (respondent, trial).
+    """
+    survey = db.get(Survey, survey_id)
+    if not survey:
+        raise HTTPException(404, "survey not found")
+    design = db.execute(
+        select(Design)
+        .where(Design.survey_id == survey.id)
+        .options(selectinload(Design.trials))
+        .order_by(Design.created_at.desc())
+    ).scalars().first()
+    if not design:
+        raise HTTPException(400, "survey has no design to import against")
+
+    try:
+        text = file.file.read().decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise HTTPException(400, "file must be UTF-8 encoded text/CSV")
+    reader = csv.DictReader(io.StringIO(text))
+    cols = reader.fieldnames or []
+    missing = [
+        c for c in (id_column, left_column, right_column, value_column)
+        if c not in cols
+    ]
+    if missing:
+        raise HTTPException(
+            400, f"missing column(s) {missing}; found {cols}",
+        )
+
+    pos_by_id = {o.id: o.position for o in survey.objects}
+    # (left_pos, right_pos) -> trial. Note: ambiguous if a direction repeats.
+    trial_by_dir: dict[tuple[int, int], Trial] = {}
+    for t in design.trials:
+        trial_by_dir[(pos_by_id[t.left_id], pos_by_id[t.right_id])] = t
+    repeats = len(trial_by_dir) < len(design.trials)
+
+    midpoint = (survey.scale_min + survey.scale_max) / 2.0
+    shift = 1 if one_indexed else 0
+
+    existing = {
+        r.external_id: r
+        for r in db.execute(
+            select(Respondent).where(Respondent.survey_id == survey.id)
+        ).scalars()
+    }
+
+    by_id: dict[str, list[dict]] = defaultdict(list)
+    for row in reader:
+        by_id[(row.get(id_column) or "").strip()].append(row)
+
+    errors: list[str] = []
+    n_resp = n_response = skipped = 0
+
+    for ext_id, rows in by_id.items():
+        if not ext_id:
+            skipped += len(rows)
+            if len(errors) < 20:
+                errors.append("row(s) with empty id skipped")
+            continue
+        resp = existing.get(ext_id)
+        if resp is None:
+            resp = Respondent(survey_id=survey.id, external_id=ext_id)
+            db.add(resp)
+            db.flush()
+            existing[ext_id] = resp
+            n_resp += 1
+        done = {
+            x.trial_id
+            for x in db.execute(
+                select(Response).where(Response.respondent_id == resp.id)
+            ).scalars()
+        }
+        for row in rows:
+            try:
+                left = int(row[left_column]) - shift
+                right = int(row[right_column]) - shift
+                raw = float(row[value_column])
+            except (TypeError, ValueError):
+                skipped += 1
+                if len(errors) < 20:
+                    errors.append(f"id {ext_id}: unparseable row {dict(row)}")
+                continue
+            trial = trial_by_dir.get((left, right))
+            if trial is None:
+                skipped += 1
+                if len(errors) < 20:
+                    errors.append(
+                        f"id {ext_id}: no trial for direction "
+                        f"({left + shift},{right + shift})",
+                    )
+                continue
+            if not (survey.scale_min <= raw <= survey.scale_max):
+                skipped += 1
+                if len(errors) < 20:
+                    errors.append(
+                        f"id {ext_id}: value {raw} outside scale "
+                        f"[{survey.scale_min}, {survey.scale_max}]",
+                    )
+                continue
+            if trial.id in done:
+                continue
+            db.add(Response(
+                respondent_id=resp.id, trial_id=trial.id,
+                raw_value=raw, y=raw - midpoint,
+            ))
+            done.add(trial.id)
+            n_response += 1
+
+    if repeats and len(errors) < 20:
+        errors.append(
+            "warning: design repeats a comparison direction; rows were matched "
+            "to one such trial — verify if your design has indirect repetitions",
+        )
+
+    db.commit()
+
+    total_responses = db.execute(
+        select(Response)
+        .join(Respondent, Response.respondent_id == Respondent.id)
+        .where(Respondent.survey_id == survey.id)
+    ).scalars().all()
+
+    return ImportResult(
+        respondents_added=n_resp,
+        responses_added=n_response,
+        skipped=skipped,
+        total_respondents=len(existing),
+        total_responses=len(total_responses),
+        errors=errors,
     )
 
 

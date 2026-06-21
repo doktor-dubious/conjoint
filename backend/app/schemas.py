@@ -204,6 +204,15 @@ class RespondentOut(BaseModel):
     completed_at: Optional[datetime]
 
 
+class ImportResult(BaseModel):
+    respondents_added: int
+    responses_added: int
+    skipped: int
+    total_respondents: int
+    total_responses: int
+    errors: List[str] = Field(default_factory=list)
+
+
 class ResponseSubmit(BaseModel):
     trial_id: str
     raw_value: float

@@ -163,15 +163,30 @@ export function SurveyListPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [importNote, setImportNote] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
-  function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (!file) return;
-    setImportNote(
-      `Selected “${file.name}” — response-data import is not wired to the backend yet.`,
-    );
     e.target.value = "";
+    if (!file || !selected) return;
+    setImporting(true);
+    setImportNote(`Importing “${file.name}”…`);
+    try {
+      const r = await api.importResponses(selected.id, file);
+      const head =
+        `Imported “${file.name}”: ${r.responses_added} response(s) added ` +
+        `(${r.respondents_added} new respondent(s); ${r.total_responses} total).` +
+        (r.skipped ? ` ${r.skipped} row(s) skipped.` : "");
+      const tail = r.errors.length ? ` — ${r.errors[0]}` : "";
+      setImportNote(head + tail);
+    } catch (err) {
+      setImportNote(
+        `Import failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      setImporting(false);
+    }
   }
 
   // Editable detail fields (Details tab).
@@ -464,9 +479,10 @@ export function SurveyListPage() {
                 <Button
                   variant="outline"
                   onClick={() => importInputRef.current?.click()}
+                  disabled={importing}
                 >
                   <Upload className="h-4 w-4" />
-                  Import data
+                  {importing ? "Importing…" : "Import data"}
                 </Button>
                 <input
                   ref={importInputRef}

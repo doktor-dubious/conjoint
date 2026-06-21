@@ -88,6 +88,15 @@ export interface SurveyInstanceCreate {
   objects: ObjectDefIn[];
 }
 
+export interface ImportResult {
+  respondents_added: number;
+  responses_added: number;
+  skipped: number;
+  total_respondents: number;
+  total_responses: number;
+  errors: string[];
+}
+
 export interface SurveyCreate {
   name: string;
   description?: string;
@@ -250,6 +259,35 @@ export const api = {
   },
   deleteSurvey(id: string) {
     return request<void>(`/api/surveys/${id}`, { method: "DELETE" });
+  },
+  async importResponses(
+    surveyId: string,
+    file: File,
+    opts?: {
+      idColumn?: string;
+      leftColumn?: string;
+      rightColumn?: string;
+      valueColumn?: string;
+      oneIndexed?: boolean;
+    },
+  ): Promise<ImportResult> {
+    const form = new FormData();
+    form.append("file", file);
+    if (opts?.idColumn) form.append("id_column", opts.idColumn);
+    if (opts?.leftColumn) form.append("left_column", opts.leftColumn);
+    if (opts?.rightColumn) form.append("right_column", opts.rightColumn);
+    if (opts?.valueColumn) form.append("value_column", opts.valueColumn);
+    if (opts?.oneIndexed !== undefined)
+      form.append("one_indexed", String(opts.oneIndexed));
+    // No JSON content-type — the browser sets the multipart boundary.
+    const resp = await fetch(`/api/surveys/${surveyId}/responses/import`, {
+      method: "POST",
+      body: form,
+    });
+    if (!resp.ok) {
+      throw new Error(`${resp.status} ${resp.statusText}: ${await resp.text()}`);
+    }
+    return resp.json() as Promise<ImportResult>;
   },
 
   // designs
