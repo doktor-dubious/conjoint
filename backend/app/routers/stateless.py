@@ -30,6 +30,7 @@ def design(req: DesignRequest) -> DesignResponse:
         directed = generate_design(
             K=req.K, N=req.N, objective=req.objective,
             seed=req.seed, max_iter=req.max_iter,
+            forbid_reverse=req.forbid_reverse,
         )
     except (ValueError, NotImplementedError) as e:
         raise HTTPException(400, str(e))
@@ -64,6 +65,7 @@ def scan(req: ScanRequest) -> ScanResponse:
     rows = variance_scan(
         K=req.K, N_min=req.N_min, N_max=req.N_max,
         objective=req.objective, seed=req.seed,
+        forbid_reverse=req.forbid_reverse,
     )
     return ScanResponse(
         K=req.K, objective=req.objective,

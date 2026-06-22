@@ -229,6 +229,19 @@ export interface AnalyzeResponse {
 
 // ---------- fetch helpers ----------
 
+// Extract the human-readable message from a FastAPI error response
+// (`{"detail": "..."}`), falling back to the raw text / status line.
+async function errorMessage(resp: Response): Promise<string> {
+  const text = await resp.text();
+  try {
+    const j = JSON.parse(text);
+    if (j && typeof j.detail === "string") return j.detail;
+  } catch {
+    /* not JSON */
+  }
+  return text || `${resp.status} ${resp.statusText}`;
+}
+
 async function request<R>(
   path: string,
   init?: RequestInit,
@@ -238,8 +251,7 @@ async function request<R>(
     ...init,
   });
   if (!resp.ok) {
-    const detail = await resp.text();
-    throw new Error(`${resp.status} ${resp.statusText}: ${detail}`);
+    throw new Error(await errorMessage(resp));
   }
   if (resp.status === 204) return undefined as R;
   return resp.json() as Promise<R>;
@@ -261,6 +273,7 @@ export const api = {
     N_max: number;
     objective?: Objective;
     seed?: number;
+    forbid_reverse?: boolean;
   }) {
     return post<typeof req, ScanResponse>("/api/scan", req);
   },
@@ -269,6 +282,7 @@ export const api = {
     N: number;
     objective?: Objective;
     seed?: number;
+    forbid_reverse?: boolean;
     object_names?: string[];
   }) {
     return post<typeof req, DesignResponse>("/api/design", req);
@@ -398,7 +412,7 @@ export const api = {
       body: form,
     });
     if (!resp.ok) {
-      throw new Error(`${resp.status} ${resp.statusText}: ${await resp.text()}`);
+      throw new Error(await errorMessage(resp));
     }
     return resp.json() as Promise<ImportResult>;
   },

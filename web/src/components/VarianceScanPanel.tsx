@@ -146,12 +146,14 @@ export function VarianceScanPanel({
   defaultNMin = 10,
   defaultNMax = 16,
   storageKey = "default",
+  forbidReverse = false,
   onApply,
 }: {
   defaultK?: number;
   defaultNMin?: number;
   defaultNMax?: number;
   storageKey?: string;
+  forbidReverse?: boolean;
   // When provided, an "Apply" button per row pushes (K, N) to the caller.
   onApply?: (K: number, N: number) => void;
 }) {
@@ -201,7 +203,12 @@ export function VarianceScanPanel({
     setLoading(true);
     setError(null);
     try {
-      const out = await api.scan({ K, N_min: nMin, N_max: nMax });
+      const out = await api.scan({
+        K,
+        N_min: nMin,
+        N_max: nMax,
+        forbid_reverse: forbidReverse,
+      });
       setData(out);
       setPage(1);
     } catch (e) {

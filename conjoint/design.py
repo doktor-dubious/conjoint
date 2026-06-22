@@ -22,6 +22,10 @@ UndirectedEdge = Tuple[int, int]   # (i, j) with i < j; multi-graph allowed
 DirectedEdge = Tuple[int, int]     # (left, right)
 
 
+class InfeasibleDesign(ValueError):
+    """No design exists for the requested (K, N) under the given constraints."""
+
+
 # ---------- helpers ----------
 
 def _norm(e: UndirectedEdge) -> UndirectedEdge:
@@ -148,6 +152,148 @@ def _seed_graph(K: int, N: int) -> List[UndirectedEdge]:
     return ham + chord
 
 
+# ---------- simple (reverse-free) seed ----------
+#
+# Forbidding "reverse pairs" — the same unordered pair {A,B} used in both
+# directions (A->B and B->A) — means the undirected comparison graph must be
+# *simple* (every pair at most once). A valid design then needs a connected,
+# all-even-degree simple graph on K vertices with exactly N edges, which only
+# exists for some (K, N): each degree is even and <= K-1, so e.g. K=4 only
+# admits N=4 (the 4-cycle); N=5, 6 are impossible.
+
+
+def _max_even_degree(K: int) -> int:
+    m = K - 1
+    return m if m % 2 == 0 else m - 1
+
+
+def _simple_even_degree_seq(K: int, N: int) -> List[int]:
+    """Balanced all-even degree sequence (each <= K-1) summing to 2N."""
+    cap = _max_even_degree(K)
+    if cap < 2:
+        raise InfeasibleDesign(
+            f"K={K} is too small for a reverse-free design (need K >= 3)."
+        )
+    max_edges = K * cap // 2
+    if N > max_edges:
+        raise InfeasibleDesign(
+            f"reverse-free design impossible for K={K}, N={N}: at most "
+            f"{max_edges} comparisons are possible without reusing a pair "
+            f"in both directions."
+        )
+    deg = [2] * K
+    excess = 2 * N - 2 * K  # even, >= 0
+    i = 0
+    guard = 0
+    while excess > 0:
+        if deg[i] < cap:
+            deg[i] += 2
+            excess -= 2
+        i = (i + 1) % K
+        guard += 1
+        if guard > 4 * K * K:  # safety; should never trigger after the cap check
+            raise InfeasibleDesign(
+                f"reverse-free design impossible for K={K}, N={N}."
+            )
+    return deg
+
+
+def _havel_hakimi(degrees: List[int]) -> Optional[List[UndirectedEdge]]:
+    """Build a simple graph realising `degrees`, or None if not graphical."""
+    nodes = [[d, v] for v, d in enumerate(degrees)]
+    edges: List[UndirectedEdge] = []
+    while True:
+        nodes.sort(key=lambda x: -x[0])
+        if nodes[0][0] == 0:
+            return edges
+        d0, v0 = nodes[0][0], nodes[0][1]
+        nodes[0][0] = 0
+        if d0 > len(nodes) - 1:
+            return None
+        for k in range(1, d0 + 1):
+            if nodes[k][0] <= 0:
+                return None
+            nodes[k][0] -= 1
+            a, b = v0, nodes[k][1]
+            edges.append((min(a, b), max(a, b)))
+
+
+def _components(K: int, edges: List[UndirectedEdge]) -> List[Set[int]]:
+    adj: Dict[int, Set[int]] = {v: set() for v in range(K)}
+    for a, b in edges:
+        adj[a].add(b)
+        adj[b].add(a)
+    seen: Set[int] = set()
+    comps: List[Set[int]] = []
+    for start in range(K):
+        if start in seen:
+            continue
+        comp: Set[int] = set()
+        stack = [start]
+        while stack:
+            v = stack.pop()
+            if v in comp:
+                continue
+            comp.add(v)
+            stack.extend(adj[v] - comp)
+        seen |= comp
+        comps.append(comp)
+    return comps
+
+
+def _make_connected(
+    K: int, edges: List[UndirectedEdge]
+) -> Optional[List[UndirectedEdge]]:
+    """Merge components with degree-preserving simple 2-swaps."""
+    edges = list(edges)
+    for _ in range(2 * K * K):
+        comps = _components(K, edges)
+        if len(comps) <= 1:
+            return edges
+        a_set, b_set = comps[0], comps[1]
+        eset = set(edges)
+        done = False
+        for ia, (a, b) in enumerate(edges):
+            if not (a in a_set and b in a_set):
+                continue
+            for ib, (c, d) in enumerate(edges):
+                if ia == ib or not (c in b_set and d in b_set):
+                    continue
+                for (na, nb), (nc, nd) in (((a, c), (b, d)), ((a, d), (b, c))):
+                    if na == nb or nc == nd:
+                        continue
+                    n1 = (min(na, nb), max(na, nb))
+                    n2 = (min(nc, nd), max(nc, nd))
+                    if n1 == n2 or n1 in eset or n2 in eset:
+                        continue
+                    edges[ia], edges[ib] = n1, n2
+                    done = True
+                    break
+                if done:
+                    break
+            if done:
+                break
+        if not done:
+            return None
+    return None
+
+
+def _simple_seed(K: int, N: int) -> List[UndirectedEdge]:
+    deg = _simple_even_degree_seq(K, N)
+    edges = _havel_hakimi(deg)
+    if edges is None:
+        raise InfeasibleDesign(
+            f"reverse-free design impossible for K={K}, N={N}."
+        )
+    edges = _make_connected(K, edges)
+    if edges is None:
+        raise InfeasibleDesign(
+            f"reverse-free design impossible for K={K}, N={N}: cannot connect "
+            f"a simple all-even graph with that many comparisons."
+        )
+    return edges
+
+
 # ---------- objective ----------
 
 def _objective(K: int, edges: List[UndirectedEdge], objective: str) -> Tuple:
@@ -199,10 +345,13 @@ def _try_swap(
     e2: UndirectedEdge,
     objective: str,
     current_key: Tuple,
+    simple: bool = False,
 ) -> Optional[Tuple[List[UndirectedEdge], Tuple]]:
     new_edges = edges[:]
     new_edges[i] = e1
     new_edges[j] = e2
+    if simple and len(set(new_edges)) != len(new_edges):
+        return None  # would create a duplicate pair (reverse-free violated)
     if not is_connected(K, new_edges):
         return None
     try:
@@ -220,6 +369,7 @@ def _local_search(
     objective: str,
     max_iter: int = 500,
     rng: Optional[random.Random] = None,
+    simple: bool = False,
 ) -> List[UndirectedEdge]:
     rng = rng or random.Random(0)
     edges = edges[:]
@@ -229,7 +379,9 @@ def _local_search(
         candidates = _two_swap_candidates(K, edges)
         rng.shuffle(candidates)
         for i, j, e1, e2 in candidates:
-            result = _try_swap(K, edges, i, j, e1, e2, objective, current_key)
+            result = _try_swap(
+                K, edges, i, j, e1, e2, objective, current_key, simple=simple
+            )
             if result is not None:
                 edges, current_key = result
                 improved = True
@@ -295,6 +447,7 @@ def generate_design(
     objective: str = "d-optimal",
     seed: int = 0,
     max_iter: int = 500,
+    forbid_reverse: bool = False,
 ) -> List[DirectedEdge]:
     """Generate a directed paired-comparison design.
 
@@ -304,6 +457,9 @@ def generate_design(
         objective: 'd-optimal' (maximize spanning-tree count) or 'min-max-var'
         seed: random seed for the local search
         max_iter: maximum local-search iterations
+        forbid_reverse: if True, no unordered pair may be used in both
+            directions (the comparison graph is kept simple). May make some
+            (K, N) infeasible (raises InfeasibleDesign).
 
     Returns:
         list of N directed (left, right) edges, with vertices in 0..K-1
@@ -312,9 +468,18 @@ def generate_design(
         raise ValueError(f"K must be >= 2; got K={K}")
     if N < K:
         raise ValueError(f"N must be >= K; got N={N}, K={K}")
-    if N == K + 1 and K < 3:
-        raise ValueError(f"N = K + 1 requires K >= 3; got K={K}")
-    edges = _seed_graph(K, N)
+    if forbid_reverse:
+        if K < 3:
+            raise InfeasibleDesign(
+                f"reverse-free design requires K >= 3; got K={K}."
+            )
+        edges = _simple_seed(K, N)
+    else:
+        if N == K + 1 and K < 3:
+            raise ValueError(f"N = K + 1 requires K >= 3; got K={K}")
+        edges = _seed_graph(K, N)
     rng = random.Random(seed)
-    edges = _local_search(K, edges, objective, max_iter=max_iter, rng=rng)
+    edges = _local_search(
+        K, edges, objective, max_iter=max_iter, rng=rng, simple=forbid_reverse
+    )
     return orient_eulerian(K, edges)

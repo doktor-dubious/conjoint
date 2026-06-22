@@ -132,3 +132,30 @@ class TestEulerianOrientation(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestForbidReverse(unittest.TestCase):
+    """Reverse-free designs: no unordered pair used in both directions."""
+
+    def _reverse_pairs(self, directed):
+        s = set(directed)
+        return [(a, b) for (a, b) in directed if (b, a) in s]
+
+    def test_no_reverse_pairs(self):
+        for K, N in [(3, 3), (4, 4), (5, 5), (5, 6), (5, 7), (5, 10), (16, 20)]:
+            d = generate_design(K, N, forbid_reverse=True, seed=1)
+            self.assertEqual(len(d), N)
+            self.assertEqual(self._reverse_pairs(d), [],
+                             f"reverse pair found for K={K}, N={N}")
+            self.assertTrue(is_connected(K, _undirected(d)))
+
+    def test_infeasible_raises(self):
+        from conjoint.design import InfeasibleDesign
+        for K, N in [(4, 5), (4, 6), (5, 8), (5, 9), (5, 11)]:
+            with self.assertRaises(InfeasibleDesign):
+                generate_design(K, N, forbid_reverse=True, seed=1)
+
+    def test_default_allows_reverse(self):
+        # K=4, N=6 is feasible (with reverse pairs) under the default mode.
+        d = generate_design(4, 6, seed=1)
+        self.assertEqual(len(d), 6)

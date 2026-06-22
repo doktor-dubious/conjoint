@@ -16,9 +16,10 @@ def variance_scan(
     N_max: int,
     objective: str = "d-optimal",
     seed: int = 0,
+    forbid_reverse: bool = False,
 ) -> List[dict]:
     """For each feasible N in [N_min, N_max], generate a design and return
-    summary statistics. Infeasible values of N (N=K+1) are skipped with a note.
+    summary statistics. Infeasible values of N are skipped with a note.
 
     Returns:
         list of dicts with keys:
@@ -30,7 +31,10 @@ def variance_scan(
     rows = []
     for N in range(N_min, N_max + 1):
         try:
-            directed = generate_design(K, N, objective=objective, seed=seed)
+            directed = generate_design(
+                K, N, objective=objective, seed=seed,
+                forbid_reverse=forbid_reverse,
+            )
         except (ValueError, NotImplementedError) as e:
             rows.append({
                 "N": N, "residual_df": N - K,

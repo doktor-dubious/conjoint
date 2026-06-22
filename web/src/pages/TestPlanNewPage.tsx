@@ -121,6 +121,8 @@ export function TestPlanNewPage() {
   const [seed, setSeed] = useState(0);
   const [maxIter, setMaxIter] = useState(500);
   const [randomizeOrder, setRandomizeOrder] = useState(false);
+  // Forbid reverse pairs ({A,B} used as both A->B and B->A). Default on.
+  const [forbidReverse, setForbidReverse] = useState(true);
 
   // Generated comparisons preview (stateless, not yet written to the DB).
   const [preview, setPreview] = useState<DesignResponse | null>(null);
@@ -179,6 +181,7 @@ export function TestPlanNewPage() {
         N,
         objective,
         seed,
+        forbid_reverse: forbidReverse,
         object_names: genericNames(K),
       });
       setPreview(out);
@@ -411,6 +414,24 @@ export function TestPlanNewPage() {
                 </Field>
               </div>
 
+              {/* Forbid reverse pairs switch */}
+              <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/20 px-3 py-2.5">
+                <Label
+                  htmlFor="forbid-reverse"
+                  className="flex items-center gap-1.5 text-muted-foreground"
+                >
+                  <span>Forbid reverse pairs</span>
+                  <InfoHint
+                    text="Disallow using the same pair in both directions (e.g. O1→O2 and O2→O1). This keeps the comparison graph simple; some K×N combinations become impossible (e.g. 4×6)."
+                  />
+                </Label>
+                <Switch
+                  id="forbid-reverse"
+                  checked={forbidReverse}
+                  onCheckedChange={setForbidReverse}
+                />
+              </div>
+
               {/* Randomize order switch */}
               <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/20 px-3 py-2.5">
                 <Label
@@ -436,6 +457,7 @@ export function TestPlanNewPage() {
               defaultNMin={N}
               defaultNMax={N + 6}
               storageKey="new-survey"
+              forbidReverse={forbidReverse}
               onApply={(scanK, scanN) => {
                 setK(scanK);
                 setN(scanN);

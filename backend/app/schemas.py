@@ -20,6 +20,10 @@ class DesignRequest(BaseModel):
     objective: Objective = "d-optimal"
     seed: int = 0
     max_iter: int = Field(500, ge=0, le=5000)
+    forbid_reverse: bool = Field(
+        False,
+        description="forbid reverse pairs (A->B and B->A); keeps the graph simple",
+    )
     object_names: Optional[List[str]] = Field(
         None, description="optional names; defaults to Obj_01..Obj_K"
     )
@@ -56,6 +60,7 @@ class ScanRequest(BaseModel):
     N_max: int = Field(..., ge=2)
     objective: Objective = "d-optimal"
     seed: int = 0
+    forbid_reverse: bool = False
 
 
 class ScanRow(BaseModel):
