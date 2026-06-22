@@ -9,14 +9,12 @@ import {
   Home,
   LayoutGrid,
   LogOut,
-  Moon,
   Plus,
   Search,
   Settings,
-  Sun,
 } from "lucide-react";
 
-import sidebarBgVideo from "../../media/sidebar-bg.mp4";
+import sidebarBgVideo from "../../media/sidebar-12-bg.mp4";
 import { cn } from "@/lib/utils";
 import { useActiveSurvey } from "@/components/providers/active-survey-provider";
 import { useTheme } from "@/components/theme-provider";
@@ -78,11 +76,61 @@ function Brand() {
   );
 }
 
+// Animated theme icon (mirrors gorm.ai): the moon wobbles on hover when dark,
+// the sun's rays stagger-fade in on hover when light. Pure CSS — the parent
+// menu item carries `group/theme` to trigger the hover animations.
+const SUN_RAYS = [
+  "M12 2v2",
+  "m19.07 4.93-1.41 1.41",
+  "M20 12h2",
+  "m17.66 17.66 1.41 1.41",
+  "M12 20v2",
+  "m6.34 17.66-1.41 1.41",
+  "M2 12h2",
+  "m4.93 4.93 1.41 1.41",
+];
+
+function ThemeIcon({ dark }: { dark: boolean }) {
+  const common = {
+    xmlns: "http://www.w3.org/2000/svg",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 2,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+  if (dark) {
+    return (
+      <svg
+        {...common}
+        className="size-4 origin-center group-hover/theme:animate-theme-wobble"
+      >
+        <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common} className="size-4">
+      <circle cx="12" cy="12" r="4" />
+      {SUN_RAYS.map((d, i) => (
+        <path
+          key={d}
+          d={d}
+          className="group-hover/theme:animate-theme-ray"
+          style={{ animationDelay: `${i * 0.1}s` }}
+        />
+      ))}
+    </svg>
+  );
+}
+
 // Muted, greyscale looping video behind the sidebar content.
 function SidebarBackground() {
   return (
     <video
-      className="pointer-events-none absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.06] grayscale"
+      className="pointer-events-none absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.16] grayscale"
       src={sidebarBgVideo}
       autoPlay
       loop
@@ -275,12 +323,13 @@ function UserMenu() {
           Configuration
         </DropdownMenuItem>
         <DropdownMenuItem
+          className="group/theme"
           onSelect={(event) => {
             event.preventDefault();
             toggleTheme();
           }}
         >
-          {theme === "dark" ? <Sun /> : <Moon />}
+          <ThemeIcon dark={theme === "dark"} />
           Theme
           <DropdownMenuShortcut className="capitalize">
             {theme}

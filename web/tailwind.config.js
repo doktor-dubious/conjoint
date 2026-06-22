@@ -84,11 +84,26 @@ export default {
           "70%": { transform: "scale(1.15) rotate(6deg)" },
           "100%": { transform: "scale(1.15) rotate(0deg)" },
         },
+        // Moon wobbles on hover (mirrors gorm.ai's theme toggle).
+        "theme-wobble": {
+          "0%, 100%": { transform: "rotate(0deg)" },
+          "20%": { transform: "rotate(-10deg)" },
+          "40%": { transform: "rotate(10deg)" },
+          "60%": { transform: "rotate(-5deg)" },
+          "80%": { transform: "rotate(5deg)" },
+        },
+        // Sun rays stagger-fade in on hover.
+        "theme-ray": {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "info-pop": "info-pop 0.35s ease-out forwards",
+        "theme-wobble": "theme-wobble 1.2s ease-in-out",
+        "theme-ray": "theme-ray 0.3s ease both",
       },
     },
   },
