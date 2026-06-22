@@ -54,7 +54,7 @@ export function EntityListPage<T extends EntityBase>({
   load: () => Promise<T[]>;
   columns: DataTableColumn<T>[];
   getSearchText: (row: T) => string;
-  onCreate: (data: {
+  onCreate?: (data: {
     name: string;
     description?: string;
     notes?: string;
@@ -108,7 +108,7 @@ export function EntityListPage<T extends EntityBase>({
     setCreateOpen(true);
   }
   async function confirmCreate() {
-    if (!newName.trim()) return;
+    if (!newName.trim() || !onCreate) return;
     setCreating(true);
     setCreateError(null);
     try {
@@ -192,12 +192,14 @@ export function EntityListPage<T extends EntityBase>({
       )}
 
       <div className={cn(selected && maximized && "hidden")}>
-        <div className="mb-3 flex justify-end">
-          <Button size="sm" onClick={openCreate}>
-            <Plus className="h-4 w-4" />
-            New {noun}
-          </Button>
-        </div>
+        {onCreate && (
+          <div className="mb-3 flex justify-end">
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="h-4 w-4" />
+              New {noun}
+            </Button>
+          </div>
+        )}
         <DataTable
           rows={rows}
           columns={columns}

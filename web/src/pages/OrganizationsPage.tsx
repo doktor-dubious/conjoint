@@ -49,7 +49,6 @@ export function OrganizationsPage() {
       load={() => api.listOrganizations()}
       columns={COLUMNS}
       getSearchText={(o) => o.name}
-      onCreate={(data) => api.createOrganization(data)}
       onUpdate={(id, patch) => api.updateOrganization(id, patch)}
       onDelete={(id) => api.deleteOrganization(id)}
       noun="organization"

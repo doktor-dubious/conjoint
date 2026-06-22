@@ -49,7 +49,6 @@ export function UsersPage() {
       load={() => api.listUsers()}
       columns={COLUMNS}
       getSearchText={(u) => u.name}
-      onCreate={(data) => api.createUser(data)}
       onUpdate={(id, patch) => api.updateUser(id, patch)}
       onDelete={(id) => api.deleteUser(id)}
       noun="user"

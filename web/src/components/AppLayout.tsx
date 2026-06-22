@@ -51,7 +51,9 @@ function pageTitle(pathname: string): string {
   if (pathname.startsWith("/surveys")) return "Surveys";
   if (pathname.startsWith("/test-plans/new")) return "New Test Plan";
   if (pathname.startsWith("/test-plans")) return "Test Plans";
+  if (pathname.startsWith("/organizations/new")) return "New Organization";
   if (pathname.startsWith("/organizations")) return "Organizations";
+  if (pathname.startsWith("/users/new")) return "New User";
   if (pathname.startsWith("/users")) return "Users";
   if (pathname.startsWith("/configuration")) return "Configuration";
   return "Copenhagen Conjoint";
@@ -330,14 +332,43 @@ function UserMenu() {
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem onClick={() => navigate("/organizations")}>
-          <Building2 />
-          Organizations
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => navigate("/users")}>
-          <Users />
-          Users
-        </DropdownMenuItem>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <Building2 />
+            Organizations
+          </DropdownMenuSubTrigger>
+          <DropdownMenuPortal>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem onClick={() => navigate("/organizations/new")}>
+                <Plus />
+                New
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/organizations")}>
+                <ClipboardList />
+                List
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuPortal>
+        </DropdownMenuSub>
+
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>
+            <Users />
+            Users
+          </DropdownMenuSubTrigger>
+          <DropdownMenuPortal>
+            <DropdownMenuSubContent>
+              <DropdownMenuItem onClick={() => navigate("/users/new")}>
+                <Plus />
+                New
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/users")}>
+                <ClipboardList />
+                List
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuPortal>
+        </DropdownMenuSub>
 
         <DropdownMenuSeparator />
 
