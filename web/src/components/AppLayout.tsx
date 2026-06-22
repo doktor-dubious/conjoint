@@ -16,6 +16,7 @@ import {
   Sun,
 } from "lucide-react";
 
+import sidebarBgVideo from "../../media/sidebar-bg.mp4";
 import { cn } from "@/lib/utils";
 import { useActiveSurvey } from "@/components/providers/active-survey-provider";
 import { useTheme } from "@/components/theme-provider";
@@ -74,6 +75,21 @@ function Brand() {
         </span>
       </div>
     </button>
+  );
+}
+
+// Muted, greyscale looping video behind the sidebar content.
+function SidebarBackground() {
+  return (
+    <video
+      className="pointer-events-none absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.06] grayscale"
+      src={sidebarBgVideo}
+      autoPlay
+      loop
+      muted
+      playsInline
+      aria-hidden="true"
+    />
   );
 }
 
@@ -288,6 +304,7 @@ export function AppLayout() {
   return (
     <SidebarProvider>
       <Sidebar collapsible="icon">
+        <SidebarBackground />
         <SidebarHeader className="h-[72px] justify-center">
           <Brand />
         </SidebarHeader>
