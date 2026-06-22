@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronDown, ChevronUp, Shuffle } from "lucide-react";
+import { Shuffle } from "lucide-react";
 
 import { VarianceScanPanel } from "@/components/VarianceScanPanel";
 import { Button } from "@/components/ui/button";
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/ui/data-table";
 import { InfoHint } from "@/components/ui/info-hint";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,14 +19,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -37,6 +33,53 @@ import {
 const OBJECTIVE_OPTIONS: { value: Objective; label: string }[] = [
   { value: "d-optimal", label: "D-optimal" },
   { value: "min-max-var", label: "Min–max variance" },
+];
+
+type TrialRow = Trial & { n: number };
+
+const COMPARISON_COLUMNS: DataTableColumn<TrialRow>[] = [
+  {
+    key: "n",
+    header: "#",
+    sortable: true,
+    sortValue: (r) => r.n,
+    render: (r) => (
+      <span className="tabular-nums text-muted-foreground">{r.n}</span>
+    ),
+    headClassName: "w-12",
+  },
+  {
+    key: "left",
+    header: "Left",
+    sortable: true,
+    sortValue: (r) => r.left.toLowerCase(),
+    render: (r) => (
+      <span className="font-medium">
+        <ObjLabel name={r.left} />
+      </span>
+    ),
+  },
+  {
+    key: "right",
+    header: "Right",
+    sortable: true,
+    sortValue: (r) => r.right.toLowerCase(),
+    render: (r) => (
+      <span className="font-medium">
+        <ObjLabel name={r.right} />
+      </span>
+    ),
+  },
+  {
+    key: "pair",
+    header: "Pair",
+    sortable: true,
+    sortValue: (r) => r.pair,
+    render: (r) => (
+      <span className="tabular-nums text-muted-foreground">{r.pair}</span>
+    ),
+    headClassName: "w-24",
+  },
 ];
 
 const HINTS = {
@@ -229,15 +272,10 @@ export function TestPlanNewPage() {
     }
   }
 
-  function moveRow(i: number, dir: -1 | 1) {
-    setOrderedTrials((prev) => {
-      const j = i + dir;
-      if (j < 0 || j >= prev.length) return prev;
-      const next = prev.slice();
-      [next[i], next[j]] = [next[j], next[i]];
-      return next;
-    });
-  }
+  const comparisonRows = useMemo(
+    () => orderedTrials.map((t, i) => ({ ...t, n: i + 1 })),
+    [orderedTrials],
+  );
 
   const generateLabel = generating
     ? validPreview
@@ -499,10 +537,11 @@ export function TestPlanNewPage() {
                 <p className="rounded-md border bg-muted/20 p-3 text-xs leading-relaxed text-muted-foreground">
                   The comparisons are generated as an <b>Eulerian circuit</b> —
                   each comparison shares an object with the next, so the sequence
-                  flows smoothly. Reordering or shuffling the rows below breaks
-                  the circuit, but it is <b>statistically harmless</b>: changing
-                  the row order leaves the design (X′X), its D-optimality, and all
-                  estimate variances exactly unchanged.
+                  flows smoothly. <b>Shuffle</b> sets the presentation order that
+                  gets finalized; sorting the columns below is just for browsing.
+                  Re-ordering is <b>statistically harmless</b>: it leaves the
+                  design (X′X), its D-optimality, and all estimate variances
+                  exactly unchanged.
                 </p>
 
                 {structuralStale && (
@@ -512,59 +551,16 @@ export function TestPlanNewPage() {
                   </div>
                 )}
 
-                <div className="overflow-hidden rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50 hover:bg-muted/50">
-                        <TableHead className="w-12">#</TableHead>
-                        <TableHead>Left</TableHead>
-                        <TableHead>Right</TableHead>
-                        <TableHead className="w-24">Pair</TableHead>
-                        <TableHead className="w-20 text-right">Move</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {orderedTrials.map((t, i) => (
-                        <TableRow key={`${t.pair}-${i}`}>
-                          <TableCell className="tabular-nums text-muted-foreground">
-                            {i + 1}
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            <ObjLabel name={t.left} />
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            <ObjLabel name={t.right} />
-                          </TableCell>
-                          <TableCell className="tabular-nums text-muted-foreground">
-                            {t.pair}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="inline-flex items-center gap-0.5">
-                              <button
-                                type="button"
-                                onClick={() => moveRow(i, -1)}
-                                disabled={i === 0}
-                                aria-label="Move up"
-                                className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:invisible"
-                              >
-                                <ChevronUp className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => moveRow(i, 1)}
-                                disabled={i === orderedTrials.length - 1}
-                                aria-label="Move down"
-                                className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:invisible"
-                              >
-                                <ChevronDown className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                <DataTable
+                  rows={comparisonRows}
+                  columns={COMPARISON_COLUMNS}
+                  getRowId={(r) => String(r.n)}
+                  getSearchText={(r) =>
+                    `${r.n} ${r.left} ${r.right} ${r.pair}`
+                  }
+                  emptyText="No comparisons."
+                  initialSortKey="n"
+                />
               </div>
             </TabsContent>
           )}
