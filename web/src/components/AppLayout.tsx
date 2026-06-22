@@ -89,7 +89,13 @@ const SUN_RAYS = [
   "m4.93 4.93 1.41 1.41",
 ];
 
-function ThemeIcon({ dark }: { dark: boolean }) {
+function ThemeIcon({
+  dark,
+  className,
+}: {
+  dark: boolean;
+  className?: string;
+}) {
   const common = {
     xmlns: "http://www.w3.org/2000/svg",
     viewBox: "0 0 24 24",
@@ -104,14 +110,17 @@ function ThemeIcon({ dark }: { dark: boolean }) {
     return (
       <svg
         {...common}
-        className="size-4 origin-center group-hover/theme:animate-theme-wobble"
+        className={cn(
+          "size-4 origin-center group-hover/theme:animate-theme-wobble",
+          className,
+        )}
       >
         <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
       </svg>
     );
   }
   return (
-    <svg {...common} className="size-4">
+    <svg {...common} className={cn("size-4", className)}>
       <circle cx="12" cy="12" r="4" />
       {SUN_RAYS.map((d, i) => (
         <path
@@ -328,8 +337,8 @@ function UserMenu() {
             toggleTheme();
           }}
         >
-          <ThemeIcon dark={theme === "dark"} />
           Theme
+          <ThemeIcon dark={theme === "dark"} className="ml-auto" />
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
