@@ -1,5 +1,8 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
 import {
+  Check,
+  ChevronDown,
   ChevronUp,
   ClipboardList,
   FlaskConical,
@@ -8,11 +11,13 @@ import {
   LogOut,
   Moon,
   Plus,
+  Search,
   Settings,
   Sun,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useActiveSurvey } from "@/components/providers/active-survey-provider";
 import { useTheme } from "@/components/theme-provider";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -69,6 +74,103 @@ function Brand() {
         </span>
       </div>
     </button>
+  );
+}
+
+// Active-survey selector in the sidebar (mirrors gorm.ai's customer switcher):
+// a primary-coloured bar showing the active survey, opening a searchable list.
+function SurveySwitcher() {
+  const navigate = useNavigate();
+  const { surveys, activeSurvey, setActiveSurvey, loading } = useActiveSurvey();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? surveys.filter((s) => s.name.toLowerCase().includes(q))
+    : surveys;
+
+  function select(s: (typeof surveys)[number]) {
+    setActiveSurvey(s);
+    setOpen(false);
+    setQuery("");
+    navigate(`/surveys/${s.id}`);
+  }
+
+  const label =
+    activeSurvey?.name ??
+    (loading ? "Loading…" : surveys.length ? "Select survey…" : "No surveys");
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2 border-b border-sidebar-border bg-primary px-3 py-2 text-left text-primary-foreground outline-none transition-colors hover:bg-primary/90 group-data-[collapsible=icon]:justify-center"
+      >
+        <ClipboardList className="size-4 shrink-0" />
+        <span className="flex-1 truncate text-xs group-data-[collapsible=icon]:hidden">
+          {label}
+        </span>
+        <ChevronDown className="size-3 shrink-0 group-data-[collapsible=icon]:hidden" />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-xl">
+          <div className="flex items-center gap-2 border-b px-2.5">
+            <Search className="size-3.5 shrink-0 text-muted-foreground" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search surveys…"
+              className="h-9 w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+          <div className="max-h-72 overflow-y-auto p-1">
+            {filtered.length === 0 ? (
+              <p className="px-2 py-6 text-center text-xs text-muted-foreground">
+                {loading ? "Loading…" : "No surveys found."}
+              </p>
+            ) : (
+              filtered.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => select(s)}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-accent-foreground",
+                    s.id === activeSurvey?.id && "font-medium",
+                  )}
+                >
+                  <span className="flex-1 truncate">{s.name}</span>
+                  {s.id === activeSurvey?.id && (
+                    <Check className="size-3.5 shrink-0" />
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -189,6 +291,7 @@ export function AppLayout() {
         <SidebarHeader>
           <Brand />
         </SidebarHeader>
+        <SurveySwitcher />
         <SidebarContent />
         <SidebarFooter>
           <UserMenu />
