@@ -26,7 +26,6 @@ import {
   DropdownMenuItem,
   DropdownMenuPortal,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -331,9 +330,6 @@ function UserMenu() {
         >
           <ThemeIcon dark={theme === "dark"} />
           Theme
-          <DropdownMenuShortcut className="capitalize">
-            {theme}
-          </DropdownMenuShortcut>
         </DropdownMenuItem>
 
         <DropdownMenuSeparator />
