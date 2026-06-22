@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Building2,
   Check,
@@ -16,7 +16,6 @@ import {
   Users,
 } from "lucide-react";
 
-import sidebarBgVideo from "../../media/sidebar-12-bg.mp4";
 import { cn } from "@/lib/utils";
 import { useActiveSurvey } from "@/components/providers/active-survey-provider";
 import { useTheme } from "@/components/theme-provider";
@@ -140,12 +139,32 @@ function ThemeIcon({
   );
 }
 
+// Every sidebar background clip in web/media; one is chosen at random per load.
+const SIDEBAR_VIDEO_URLS = Object.values(
+  import.meta.glob("../../media/sidebar-*-bg.mp4", {
+    eager: true,
+    query: "?url",
+    import: "default",
+  }) as Record<string, string>,
+);
+
 // Muted, greyscale looping video behind the sidebar content.
 function SidebarBackground() {
+  const src = useMemo(
+    () =>
+      SIDEBAR_VIDEO_URLS.length
+        ? SIDEBAR_VIDEO_URLS[
+            Math.floor(Math.random() * SIDEBAR_VIDEO_URLS.length)
+          ]
+        : null,
+    [],
+  );
+  if (!src) return null;
   return (
     <video
+      key={src}
       className="pointer-events-none absolute inset-0 -z-10 h-full w-full object-cover opacity-[0.16] grayscale"
-      src={sidebarBgVideo}
+      src={src}
       autoPlay
       loop
       muted
