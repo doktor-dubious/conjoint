@@ -14,7 +14,7 @@ from conjoint.variance import variance_stats
 
 from ..db import get_db
 from ..models import (
-    Design, ObjectItem, Respondent, Response, Survey, Trial,
+    Design, ObjectItem, Respondent, Response, Survey, Trial, User,
 )
 from ..schemas import (
     GenerateDesignRequest, ImportResult, ManualDesignRequest, RespondentCreate,
@@ -131,6 +131,7 @@ def instantiate_survey(
 @router.get("", response_model=list[SurveyOut])
 def list_surveys(
     test_plan: bool | None = None,
+    organization_id: str | None = None,
     db: Session = Depends(get_db),
 ) -> list[Survey]:
     """List surveys.
@@ -138,16 +139,23 @@ def list_surveys(
     test_plan=True  -> only reusable test plans (no source_test_plan_id)
     test_plan=False -> only actual surveys (instantiated from a test plan)
     omitted         -> everything
+    organization_id -> only surveys belonging to that organization
     """
     stmt = (
         select(Survey)
-        .options(selectinload(Survey.objects))
+        .options(
+            selectinload(Survey.objects),
+            selectinload(Survey.users),
+            selectinload(Survey.organization),
+        )
         .order_by(Survey.created_at.desc())
     )
     if test_plan is True:
         stmt = stmt.where(Survey.source_test_plan_id.is_(None))
     elif test_plan is False:
         stmt = stmt.where(Survey.source_test_plan_id.is_not(None))
+    if organization_id:
+        stmt = stmt.where(Survey.organization_id == organization_id)
     return list(db.execute(stmt).scalars().all())
 
 
@@ -165,7 +173,8 @@ def update_survey(
     payload: SurveyUpdate,
     db: Session = Depends(get_db),
 ) -> Survey:
-    """Update editable test-plan metadata (name, description)."""
+    """Update editable survey metadata (name, description, notes, status,
+    organization, member users)."""
     survey = db.get(Survey, survey_id)
     if not survey:
         raise HTTPException(404, "survey not found")
@@ -176,6 +185,20 @@ def update_survey(
         survey.name = name
     if payload.description is not None:
         survey.description = payload.description or None
+    if payload.notes is not None:
+        survey.notes = payload.notes or None
+    if payload.status is not None:
+        if payload.status not in ("inactive", "running", "completed"):
+            raise HTTPException(400, f"invalid status {payload.status!r}")
+        survey.status = payload.status
+    if payload.organization_id is not None:
+        survey.organization_id = payload.organization_id or None
+    if payload.user_ids is not None:
+        survey.users = list(
+            db.execute(
+                select(User).where(User.id.in_(payload.user_ids))
+            ).scalars()
+        ) if payload.user_ids else []
     db.commit()
     db.refresh(survey)
     return survey

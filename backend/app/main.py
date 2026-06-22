@@ -10,7 +10,7 @@ Routers:
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import stateless, surveys, analysis
+from .routers import analysis, organizations, stateless, surveys, users
 
 
 app = FastAPI(
@@ -34,6 +34,8 @@ app.include_router(stateless.router)
 app.include_router(surveys.router)
 app.include_router(surveys.resp_router)
 app.include_router(analysis.router)
+app.include_router(organizations.router)
+app.include_router(users.router)
 
 
 @app.get("/healthz")

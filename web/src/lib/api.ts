@@ -60,16 +60,46 @@ export interface ObjectOut {
   image: string | null;
 }
 
+export type SurveyStatus = "inactive" | "running" | "completed";
+
+export interface EntityLite {
+  id: string;
+  name: string;
+}
+
+export interface OrganizationOut {
+  id: string;
+  name: string;
+  description: string | null;
+  notes: string | null;
+  created_at: string;
+  users: EntityLite[];
+}
+
+export interface UserOut {
+  id: string;
+  name: string;
+  description: string | null;
+  notes: string | null;
+  created_at: string;
+  organizations: EntityLite[];
+}
+
 export interface SurveyOut {
   id: string;
   name: string;
   description: string | null;
+  notes: string | null;
+  status: SurveyStatus;
   K: number;
   N: number;
   scale_min: number;
   scale_max: number;
   randomize_order: boolean;
   source_test_plan_id: string | null;
+  organization_id: string | null;
+  organization: EntityLite | null;
+  users: EntityLite[];
   created_at: string;
   objects: ObjectOut[];
 }
@@ -245,10 +275,72 @@ export const api = {
   },
 
   // surveys
-  listSurveys(opts?: { testPlan?: boolean }) {
-    const q =
-      opts?.testPlan === undefined ? "" : `?test_plan=${opts.testPlan}`;
-    return get<SurveyOut[]>(`/api/surveys${q}`);
+  listSurveys(opts?: { testPlan?: boolean; organizationId?: string }) {
+    const qs = new URLSearchParams();
+    if (opts?.testPlan !== undefined) qs.set("test_plan", String(opts.testPlan));
+    if (opts?.organizationId) qs.set("organization_id", opts.organizationId);
+    const q = qs.toString();
+    return get<SurveyOut[]>(`/api/surveys${q ? `?${q}` : ""}`);
+  },
+
+  // organizations
+  listOrganizations() {
+    return get<OrganizationOut[]>("/api/organizations");
+  },
+  createOrganization(req: {
+    name: string;
+    description?: string;
+    notes?: string;
+    user_ids?: string[];
+  }) {
+    return post<typeof req, OrganizationOut>("/api/organizations", req);
+  },
+  updateOrganization(
+    id: string,
+    req: {
+      name?: string;
+      description?: string | null;
+      notes?: string | null;
+      user_ids?: string[];
+    },
+  ) {
+    return request<OrganizationOut>(`/api/organizations/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(req),
+    });
+  },
+  deleteOrganization(id: string) {
+    return request<void>(`/api/organizations/${id}`, { method: "DELETE" });
+  },
+
+  // users
+  listUsers() {
+    return get<UserOut[]>("/api/users");
+  },
+  createUser(req: {
+    name: string;
+    description?: string;
+    notes?: string;
+    organization_ids?: string[];
+  }) {
+    return post<typeof req, UserOut>("/api/users", req);
+  },
+  updateUser(
+    id: string,
+    req: {
+      name?: string;
+      description?: string | null;
+      notes?: string | null;
+      organization_ids?: string[];
+    },
+  ) {
+    return request<UserOut>(`/api/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(req),
+    });
+  },
+  deleteUser(id: string) {
+    return request<void>(`/api/users/${id}`, { method: "DELETE" });
   },
   instantiateSurvey(testPlanId: string, req: SurveyInstanceCreate) {
     return post<SurveyInstanceCreate, SurveyOut>(
@@ -264,7 +356,14 @@ export const api = {
   },
   updateSurvey(
     id: string,
-    req: { name?: string; description?: string | null },
+    req: {
+      name?: string;
+      description?: string | null;
+      notes?: string | null;
+      status?: SurveyStatus;
+      organization_id?: string | null;
+      user_ids?: string[];
+    },
   ) {
     return request<SurveyOut>(`/api/surveys/${id}`, {
       method: "PATCH",

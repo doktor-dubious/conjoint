@@ -16,13 +16,72 @@ from __future__ import annotations
 from typing import List, Optional
 
 from sqlalchemy import (
-    Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text,
-    UniqueConstraint, text,
+    Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Table,
+    Text, UniqueConstraint, text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
+
+
+# ---------------------------------------------------------------------------
+# Organizations + Users (many-to-many) and survey membership
+# ---------------------------------------------------------------------------
+
+user_organizations = Table(
+    "user_organizations",
+    Base.metadata,
+    Column(
+        "user_id", UUID(as_uuid=False),
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True,
+    ),
+    Column(
+        "organization_id", UUID(as_uuid=False),
+        ForeignKey("organizations.id", ondelete="CASCADE"), primary_key=True,
+    ),
+)
+
+survey_users = Table(
+    "survey_users",
+    Base.metadata,
+    Column(
+        "survey_id", UUID(as_uuid=False),
+        ForeignKey("surveys.id", ondelete="CASCADE"), primary_key=True,
+    ),
+    Column(
+        "user_id", UUID(as_uuid=False),
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True,
+    ),
+)
+
+
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    name: Mapped[str] = mapped_column(String(255))
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+
+    users: Mapped[List[User]] = relationship(
+        secondary=user_organizations, back_populates="organizations",
+    )
+    surveys: Mapped[List[Survey]] = relationship(back_populates="organization")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    name: Mapped[str] = mapped_column(String(255))
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+
+    organizations: Mapped[List[Organization]] = relationship(
+        secondary=user_organizations, back_populates="users",
+    )
+    surveys: Mapped[List[Survey]] = relationship(
+        secondary=survey_users, back_populates="users",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +112,25 @@ class Survey(Base):
         nullable=True,
         index=True,
     )
+    # Lifecycle status: 'inactive' (default) | 'running' | 'completed'.
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="inactive", default="inactive",
+    )
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    # A survey belongs to a single organization and one or more users.
+    organization_id: Mapped[Optional[str]] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("organizations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
+    organization: Mapped[Optional[Organization]] = relationship(
+        back_populates="surveys",
+    )
+    users: Mapped[List[User]] = relationship(
+        secondary=survey_users, back_populates="surveys",
+    )
     objects: Mapped[List[ObjectItem]] = relationship(
         back_populates="survey",
         cascade="all, delete-orphan",

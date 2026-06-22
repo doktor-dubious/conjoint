@@ -3,6 +3,8 @@ import { Route, Routes } from "react-router-dom";
 import { ActiveSurveyProvider } from "@/components/providers/active-survey-provider";
 import { AppLayout } from "@/components/AppLayout";
 import { ConfigurationPage } from "@/pages/ConfigurationPage";
+import { OrganizationsPage } from "@/pages/OrganizationsPage";
+import { UsersPage } from "@/pages/UsersPage";
 import { ParticipantPage } from "@/pages/ParticipantPage";
 import { ResultsPage } from "@/pages/ResultsPage";
 import { SurveyDetailPage } from "@/pages/SurveyDetailPage";
@@ -23,6 +25,8 @@ export default function App() {
         <Route path="surveys/:id/results" element={<ResultsPage />} />
         <Route path="test-plans" element={<TestPlansPage />} />
         <Route path="test-plans/new" element={<TestPlanNewPage />} />
+        <Route path="organizations" element={<OrganizationsPage />} />
+        <Route path="users" element={<UsersPage />} />
         <Route path="configuration" element={<ConfigurationPage />} />
       </Route>
         {/* Participant view rendered without nav so respondents stay focused */}

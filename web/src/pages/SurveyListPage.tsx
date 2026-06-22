@@ -9,6 +9,7 @@ import {
   Upload,
 } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -49,11 +50,14 @@ import {
 import {
   api,
   type AnalyzeResponse,
+  type OrganizationOut,
   type RespondentAnalysis,
   type StoredDesignOut,
   type StoredTrialOut,
   type SurveyDataRow,
   type SurveyOut,
+  type SurveyStatus,
+  type UserOut,
 } from "@/lib/api";
 
 const TAB_CLASS = "rounded-none py-2.5";
@@ -123,6 +127,30 @@ const SURVEY_DATA_COLUMNS: DataTableColumn<SurveyDataRow>[] = [
   },
 ];
 
+const STATUS_LABEL: Record<SurveyStatus, string> = {
+  inactive: "Inactive",
+  running: "Running",
+  completed: "Completed",
+};
+const STATUS_CLASS: Record<SurveyStatus, string> = {
+  inactive: "bg-muted text-muted-foreground border-transparent",
+  running: "border-blue-500/30 bg-blue-500/15 text-blue-400",
+  completed: "border-emerald-500/30 bg-emerald-500/15 text-emerald-400",
+};
+const STATUS_ORDER: Record<SurveyStatus, number> = {
+  inactive: 0,
+  running: 1,
+  completed: 2,
+};
+
+function StatusBadge({ status }: { status: SurveyStatus }) {
+  return (
+    <Badge variant="outline" className={STATUS_CLASS[status]}>
+      {STATUS_LABEL[status]}
+    </Badge>
+  );
+}
+
 const SURVEY_COLUMNS: DataTableColumn<SurveyOut>[] = [
   {
     key: "name",
@@ -132,43 +160,11 @@ const SURVEY_COLUMNS: DataTableColumn<SurveyOut>[] = [
     render: (s) => <span className="font-medium">{s.name}</span>,
   },
   {
-    key: "K",
-    header: "Objects",
+    key: "status",
+    header: "Status",
     sortable: true,
-    sortValue: (s) => s.K,
-    render: (s) => s.K,
-    className: "tabular-nums",
-    headClassName: "w-24",
-  },
-  {
-    key: "N",
-    header: "Comparisons",
-    sortable: true,
-    sortValue: (s) => s.N,
-    render: (s) => s.N,
-    className: "tabular-nums",
-    headClassName: "w-28",
-  },
-  {
-    key: "randomize",
-    header: "Randomize",
-    render: (s) => (
-      <span className="text-muted-foreground">
-        {s.randomize_order ? "Yes" : "No"}
-      </span>
-    ),
-    headClassName: "w-24",
-  },
-  {
-    key: "created",
-    header: "Created",
-    sortable: true,
-    sortValue: (s) => s.created_at,
-    render: (s) => (
-      <span className="text-muted-foreground">
-        {new Date(s.created_at).toLocaleDateString()}
-      </span>
-    ),
+    sortValue: (s) => STATUS_ORDER[s.status],
+    render: (s) => <StatusBadge status={s.status} />,
     headClassName: "w-32",
   },
 ];
@@ -355,12 +351,25 @@ export function SurveyListPage() {
   // Editable detail fields (Details tab).
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");
+  const [editNotes, setEditNotes] = useState("");
   useEffect(() => {
     setEditName(selected?.name ?? "");
     setEditDesc(selected?.description ?? "");
+    setEditNotes(selected?.notes ?? "");
   }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function saveField(patch: { name?: string; description?: string }) {
+  // Organizations + users for assignment controls.
+  const [allOrgs, setAllOrgs] = useState<OrganizationOut[]>([]);
+  const [allUsers, setAllUsers] = useState<UserOut[]>([]);
+
+  async function saveField(patch: {
+    name?: string;
+    description?: string | null;
+    notes?: string | null;
+    status?: SurveyStatus;
+    organization_id?: string | null;
+    user_ids?: string[];
+  }) {
     if (!selected) return;
     try {
       const updated = await api.updateSurvey(selected.id, patch);
@@ -377,6 +386,8 @@ export function SurveyListPage() {
       .then(setSurveys)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
+    api.listOrganizations().then(setAllOrgs).catch(() => setAllOrgs([]));
+    api.listUsers().then(setAllUsers).catch(() => setAllUsers([]));
   }, []);
 
   async function selectSurvey(survey: SurveyOut) {
@@ -549,13 +560,98 @@ export function SurveyListPage() {
                 <Textarea
                   id="d-desc"
                   value={editDesc}
-                  placeholder="Optional notes about this survey"
+                  placeholder="Short description of this survey"
                   onChange={(e) => setEditDesc(e.target.value)}
                   onBlur={() => {
                     if (editDesc !== (selected.description ?? ""))
                       saveField({ description: editDesc });
                   }}
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="d-notes" className="text-muted-foreground">
+                  Notes
+                </Label>
+                <Textarea
+                  id="d-notes"
+                  value={editNotes}
+                  placeholder="Internal notes"
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  onBlur={() => {
+                    if (editNotes !== (selected.notes ?? ""))
+                      saveField({ notes: editNotes });
+                  }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="d-status" className="text-muted-foreground">
+                  Status
+                </Label>
+                <select
+                  id="d-status"
+                  value={selected.status}
+                  onChange={(e) =>
+                    saveField({ status: e.target.value as SurveyStatus })
+                  }
+                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="inactive">Inactive</option>
+                  <option value="running">Running</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="d-org" className="text-muted-foreground">
+                  Organization
+                </Label>
+                <select
+                  id="d-org"
+                  value={selected.organization_id ?? ""}
+                  onChange={(e) =>
+                    saveField({ organization_id: e.target.value || null })
+                  }
+                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <option value="">— None —</option>
+                  {allOrgs.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-muted-foreground">Users</Label>
+                {allUsers.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No users yet — add them on the Users page.
+                  </p>
+                ) : (
+                  <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2">
+                    {allUsers.map((u) => {
+                      const checked = selected.users.some((x) => x.id === u.id);
+                      return (
+                        <label
+                          key={u.id}
+                          className="flex cursor-pointer items-center gap-2 rounded-sm px-1.5 py-1 text-sm hover:bg-accent"
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(v) => {
+                              const ids = new Set(
+                                selected.users.map((x) => x.id),
+                              );
+                              if (v) ids.add(u.id);
+                              else ids.delete(u.id);
+                              saveField({ user_ids: [...ids] });
+                            }}
+                          />
+                          {u.name}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </TabsContent>
 

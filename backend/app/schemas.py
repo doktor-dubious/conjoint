@@ -98,6 +98,75 @@ class SurveyCreate(BaseModel):
 class SurveyUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    notes: Optional[str] = None
+    status: Optional[str] = None
+    organization_id: Optional[str] = None
+    user_ids: Optional[List[str]] = None
+
+
+# ---------------------------------------------------------------------------
+# Organizations + Users
+# ---------------------------------------------------------------------------
+
+
+class OrgLite(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    name: str
+
+
+class UserLite(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    name: str
+
+
+class OrganizationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    name: str
+    description: Optional[str]
+    notes: Optional[str]
+    created_at: datetime
+    users: List[UserLite] = []
+
+
+class OrganizationCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    notes: Optional[str] = None
+    user_ids: Optional[List[str]] = None
+
+
+class OrganizationUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    notes: Optional[str] = None
+    user_ids: Optional[List[str]] = None
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    name: str
+    description: Optional[str]
+    notes: Optional[str]
+    created_at: datetime
+    organizations: List[OrgLite] = []
+
+
+class UserCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    notes: Optional[str] = None
+    organization_ids: Optional[List[str]] = None
+
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    notes: Optional[str] = None
+    organization_ids: Optional[List[str]] = None
 
 
 class ObjectOut(BaseModel):
@@ -115,12 +184,17 @@ class SurveyOut(BaseModel):
     id: str
     name: str
     description: Optional[str]
+    notes: Optional[str] = None
+    status: str = "inactive"
     K: int
     N: int
     scale_min: float
     scale_max: float
     randomize_order: bool
     source_test_plan_id: Optional[str] = None
+    organization_id: Optional[str] = None
+    organization: Optional[OrgLite] = None
+    users: List[UserLite] = []
     created_at: datetime
     objects: List[ObjectOut]
 

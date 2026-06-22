@@ -1,6 +1,7 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import {
+  Building2,
   Check,
   ChevronDown,
   ChevronUp,
@@ -12,6 +13,7 @@ import {
   Plus,
   Search,
   Settings,
+  Users,
 } from "lucide-react";
 
 import sidebarBgVideo from "../../media/sidebar-12-bg.mp4";
@@ -49,6 +51,8 @@ function pageTitle(pathname: string): string {
   if (pathname.startsWith("/surveys")) return "Surveys";
   if (pathname.startsWith("/test-plans/new")) return "New Test Plan";
   if (pathname.startsWith("/test-plans")) return "Test Plans";
+  if (pathname.startsWith("/organizations")) return "Organizations";
+  if (pathname.startsWith("/users")) return "Users";
   if (pathname.startsWith("/configuration")) return "Configuration";
   return "Copenhagen Conjoint";
 }
@@ -323,6 +327,17 @@ function UserMenu() {
             </DropdownMenuSubContent>
           </DropdownMenuPortal>
         </DropdownMenuSub>
+
+        <DropdownMenuSeparator />
+
+        <DropdownMenuItem onClick={() => navigate("/organizations")}>
+          <Building2 />
+          Organizations
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate("/users")}>
+          <Users />
+          Users
+        </DropdownMenuItem>
 
         <DropdownMenuSeparator />
 
