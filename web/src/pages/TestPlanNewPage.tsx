@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Shuffle } from "lucide-react";
+import { ChevronDown, ChevronUp, Shuffle } from "lucide-react";
 
 import { VarianceScanPanel } from "@/components/VarianceScanPanel";
 import { Button } from "@/components/ui/button";
@@ -36,51 +36,6 @@ const OBJECTIVE_OPTIONS: { value: Objective; label: string }[] = [
 ];
 
 type TrialRow = Trial & { n: number };
-
-const COMPARISON_COLUMNS: DataTableColumn<TrialRow>[] = [
-  {
-    key: "n",
-    header: "#",
-    sortable: true,
-    sortValue: (r) => r.n,
-    render: (r) => (
-      <span className="tabular-nums text-muted-foreground">{r.n}</span>
-    ),
-    headClassName: "w-12",
-  },
-  {
-    key: "left",
-    header: "Left",
-    sortable: true,
-    sortValue: (r) => r.left.toLowerCase(),
-    render: (r) => (
-      <span className="font-medium">
-        <ObjLabel name={r.left} />
-      </span>
-    ),
-  },
-  {
-    key: "right",
-    header: "Right",
-    sortable: true,
-    sortValue: (r) => r.right.toLowerCase(),
-    render: (r) => (
-      <span className="font-medium">
-        <ObjLabel name={r.right} />
-      </span>
-    ),
-  },
-  {
-    key: "pair",
-    header: "Pair",
-    sortable: true,
-    sortValue: (r) => r.pair,
-    render: (r) => (
-      <span className="tabular-nums text-muted-foreground">{r.pair}</span>
-    ),
-    headClassName: "w-24",
-  },
-];
 
 const HINTS = {
   K: "Number of distinct objects (K) compared. The test plan is generic — objects are placeholders (O1…OK); a survey assigns the real objects later.",
@@ -272,10 +227,92 @@ export function TestPlanNewPage() {
     }
   }
 
-  const comparisonRows = useMemo(
+  function moveRow(i: number, dir: -1 | 1) {
+    setOrderedTrials((prev) => {
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const next = prev.slice();
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
+
+  const comparisonRows = useMemo<TrialRow[]>(
     () => orderedTrials.map((t, i) => ({ ...t, n: i + 1 })),
     [orderedTrials],
   );
+
+  // Non-sortable columns (manual ordering via the Move arrows).
+  const comparisonColumns = useMemo<DataTableColumn<TrialRow>[]>(() => {
+    const total = orderedTrials.length;
+    return [
+      {
+        key: "n",
+        header: "#",
+        render: (r) => (
+          <span className="tabular-nums text-muted-foreground">{r.n}</span>
+        ),
+        headClassName: "w-12",
+      },
+      {
+        key: "left",
+        header: "Left",
+        render: (r) => (
+          <span className="font-medium">
+            <ObjLabel name={r.left} />
+          </span>
+        ),
+      },
+      {
+        key: "right",
+        header: "Right",
+        render: (r) => (
+          <span className="font-medium">
+            <ObjLabel name={r.right} />
+          </span>
+        ),
+      },
+      {
+        key: "pair",
+        header: "Pair",
+        render: (r) => (
+          <span className="tabular-nums text-muted-foreground">{r.pair}</span>
+        ),
+        headClassName: "w-24",
+      },
+      {
+        key: "move",
+        header: "Move",
+        headClassName: "w-20 text-right",
+        className: "text-right",
+        render: (r) => (
+          <div
+            className="inline-flex items-center gap-0.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => moveRow(r.n - 1, -1)}
+              disabled={r.n === 1}
+              aria-label="Move up"
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:invisible"
+            >
+              <ChevronUp className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => moveRow(r.n - 1, 1)}
+              disabled={r.n === total}
+              aria-label="Move down"
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:invisible"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </button>
+          </div>
+        ),
+      },
+    ];
+  }, [orderedTrials.length]);
 
   const generateLabel = generating
     ? validPreview
@@ -537,11 +574,11 @@ export function TestPlanNewPage() {
                 <p className="rounded-md border bg-muted/20 p-3 text-xs leading-relaxed text-muted-foreground">
                   The comparisons are generated as an <b>Eulerian circuit</b> —
                   each comparison shares an object with the next, so the sequence
-                  flows smoothly. <b>Shuffle</b> sets the presentation order that
-                  gets finalized; sorting the columns below is just for browsing.
-                  Re-ordering is <b>statistically harmless</b>: it leaves the
-                  design (X′X), its D-optimality, and all estimate variances
-                  exactly unchanged.
+                  flows smoothly. Reorder the rows with the <b>Move</b> arrows or{" "}
+                  <b>Shuffle</b> to set the presentation order that gets
+                  finalized. Re-ordering is <b>statistically harmless</b>: it
+                  leaves the design (X′X), its D-optimality, and all estimate
+                  variances exactly unchanged.
                 </p>
 
                 {structuralStale && (
@@ -553,13 +590,12 @@ export function TestPlanNewPage() {
 
                 <DataTable
                   rows={comparisonRows}
-                  columns={COMPARISON_COLUMNS}
-                  getRowId={(r) => String(r.n)}
+                  columns={comparisonColumns}
+                  getRowId={(r) => String(r.trial)}
                   getSearchText={(r) =>
                     `${r.n} ${r.left} ${r.right} ${r.pair}`
                   }
                   emptyText="No comparisons."
-                  initialSortKey="n"
                 />
               </div>
             </TabsContent>
