@@ -17,7 +17,14 @@ export default defineConfig({
     },
   },
   server: {
+    host: true,
     port: 5173,
+    // In Docker the bind mount may not deliver inotify events; poll instead.
+    // Scoped via env so the host dev server keeps using native watching.
+    watch:
+      process.env.VITE_USE_POLLING === "true"
+        ? { usePolling: true, interval: 300 }
+        : undefined,
     proxy: {
       "/api": { target: apiTarget, changeOrigin: true },
       "/healthz": { target: apiTarget, changeOrigin: true },

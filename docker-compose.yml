@@ -60,13 +60,15 @@ services:
     # (see web/vite.config.ts); inside compose we override via env.
     environment:
       VITE_API_PROXY_TARGET: http://api:8000
-    develop:
-      watch:
-        - action: sync
-          path: ./web/src
-          target: /app/src
-        - action: rebuild
-          path: ./web/package.json
+      # Poll for file changes — inotify isn't always delivered across the bind
+      # mount, so this guarantees hot reload inside the container.
+      VITE_USE_POLLING: "true"
+    volumes:
+      # Bind-mount the host source so edits hot-reload (no image rebuild).
+      - ./web:/app
+      # Keep the container's own node_modules (alpine/musl); don't let the
+      # host's glibc node_modules shadow it or rollup/esbuild break.
+      - /app/node_modules
 
 volumes:
   pgdata:
