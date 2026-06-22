@@ -288,7 +288,7 @@ export function AppLayout() {
   return (
     <SidebarProvider>
       <Sidebar collapsible="icon">
-        <SidebarHeader>
+        <SidebarHeader className="h-[72px] justify-center">
           <Brand />
         </SidebarHeader>
         <SurveySwitcher />
